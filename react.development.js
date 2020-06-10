@@ -56,6 +56,7 @@ function getIteratorFn(maybeIterable) {
   if (maybeIterable === null || typeof maybeIterable !== 'object') {
     return null;
   }
+  //  获取传入参数的iterator或者@@iterator
   var maybeIterator = MAYBE_ITERATOR_SYMBOL && maybeIterable[MAYBE_ITERATOR_SYMBOL] || maybeIterable[FAUX_ITERATOR_SYMBOL];
   if (typeof maybeIterator === 'function') {
     return maybeIterator;
@@ -63,6 +64,8 @@ function getIteratorFn(maybeIterable) {
   return null;
 }
 
+//  使用invariant来判断入参的不变性
+//  使用类似sprintf的格式来处理入参，相关信息会被移除，但是函数本身在生产环境会被保留
 /**
  * Use invariant() to assert state which your program assumes to be true.
  *
@@ -74,9 +77,11 @@ function getIteratorFn(maybeIterable) {
  * will remain to ensure logic does not differ in production.
  */
 
+ // 验证格式
 var validateFormat = function () {};
 
 {
+  //  没有格式的话抛错
   validateFormat = function (format) {
     if (format === undefined) {
       throw new Error('invariant requires an error message argument');
@@ -90,14 +95,17 @@ function invariant(condition, format, a, b, c, d, e, f) {
   if (!condition) {
     var error = void 0;
     if (format === undefined) {
+      //  抛出非格式化的错误
       error = new Error('Minified exception occurred; use the non-minified dev environment ' + 'for the full error message and additional helpful warnings.');
     } else {
       var args = [a, b, c, d, e, f];
       var argIndex = 0;
       //  replace方法会对每一个匹配项返回回调函数的返回值
+      //  生成错误提示
       error = new Error(format.replace(/%s/g, function () {
         return args[argIndex++];
       }));
+      //  报错的名字是不变性的破坏
       error.name = 'Invariant Violation';
     }
 
@@ -106,6 +114,7 @@ function invariant(condition, format, a, b, c, d, e, f) {
   }
 }
 
+//  依靠对invariant的实现，我们可以保持格式和参数在web的构建中
 // Relying on the `invariant()` implementation lets us
 // preserve the format and params in the www builds.
 
@@ -123,38 +132,50 @@ function invariant(condition, format, a, b, c, d, e, f) {
  * same logic and follow the same code paths.
  */
 
+ // 低优先级的告警
 var lowPriorityWarning = function () {};
 
+//  这个括号为了封闭上下文，保持干净的命名空间
+//  大括号里面可以避免被覆盖？
 {
   var printWarning = function (format) {
+    //  复制入参数组
     for (var _len = arguments.length, args = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
       args[_key - 1] = arguments[_key];
     }
 
     var argIndex = 0;
+    //  拼凑信息
     var message = 'Warning: ' + format.replace(/%s/g, function () {
       return args[argIndex++];
     });
+    //  如果有console的实现使用它
     if (typeof console !== 'undefined') {
       console.warn(message);
     }
+    //  啥也没做
     try {
       // --- Welcome to debugging React ---
       // This error was thrown as a convenience so that you can use this stack
       // to find the callsite that caused this warning to fire.
+      //  方便使用调用栈查询
+      //  调试react用的
       throw new Error(message);
     } catch (x) {}
   };
 
+
   lowPriorityWarning = function (condition, format) {
+    //  没有格式信息，抛错
     if (format === undefined) {
       throw new Error('`lowPriorityWarning(condition, format, ...args)` requires a warning ' + 'message argument');
     }
     if (!condition) {
+      //  首先复制数组
       for (var _len2 = arguments.length, args = Array(_len2 > 2 ? _len2 - 2 : 0), _key2 = 2; _key2 < _len2; _key2++) {
         args[_key2 - 2] = arguments[_key2];
       }
-
+      //  传入格式和参数
       printWarning.apply(undefined, [format].concat(args));
     }
   };
@@ -169,6 +190,7 @@ var lowPriorityWarning$1 = lowPriorityWarning;
  * same logic and follow the same code paths.
  */
 
+ // 无调用栈的警告
 var warningWithoutStack = function () {};
 
 {
@@ -178,29 +200,34 @@ var warningWithoutStack = function () {};
     }
 
     if (format === undefined) {
+      //  没有格式直接报错
       throw new Error('`warningWithoutStack(condition, format, ...args)` requires a warning ' + 'message argument');
     }
     if (args.length > 8) {
       // Check before the condition to catch violations early.
       throw new Error('warningWithoutStack() currently supports at most 8 arguments.');
     }
+    //  如果true直接忽略
     if (condition) {
       return;
     }
     if (typeof console !== 'undefined') {
+      //  将所有入参转换成字符串
       var argsWithFormat = args.map(function (item) {
         return '' + item;
       });
+      //  添加warning头
       argsWithFormat.unshift('Warning: ' + format);
 
       // We intentionally don't use spread (or .apply) directly because it
       // breaks IE9: https://github.com/facebook/react/issues/13610
-
+      //  不直接调用call,因为在ie9下会报错
       //  手动抛出warning
       //  console方法会自动替换%s, 使用添加的后续参数
       Function.prototype.apply.call(console.error, console, argsWithFormat);
     }
     try {
+      //  这里是给react调试的地方，正常情况下是不会有作用的
       // --- Welcome to debugging React ---
       // This error was thrown as a convenience so that you can use this stack
       // to find the callsite that caused this warning to fire.
@@ -215,15 +242,22 @@ var warningWithoutStack = function () {};
   };
 }
 
+//  warning函数的副本
 var warningWithoutStack$1 = warningWithoutStack;
 
+//  未挂载组件的警告状态的是否更新
+//  一个map,key是组件内部方法的名字
 var didWarnStateUpdateForUnmountedComponent = {};
 
+//  no-op的警告 no-operate
 function warnNoop(publicInstance, callerName) {
   {
     var _constructor = publicInstance.constructor;
+    //  获取组件的名字
     var componentName = _constructor && (_constructor.displayName || _constructor.name) || 'ReactClass';
+    //  告警的key
     var warningKey = componentName + '.' + callerName;
+    //  是否更新过
     if (didWarnStateUpdateForUnmountedComponent[warningKey]) {
       return;
     }
@@ -236,6 +270,7 @@ function warnNoop(publicInstance, callerName) {
 /**
  * This is the abstract API for an update queue.
  */
+//  更新队列的抽象api
 var ReactNoopUpdateQueue = {
   /**
    * Checks whether or not this composite component is mounted.
