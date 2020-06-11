@@ -270,8 +270,9 @@ function warnNoop(publicInstance, callerName) {
 /**
  * This is the abstract API for an update queue.
  */
-//  更新队列的抽象api
+//  更新no-op队列的抽象api，no-operate的队列
 var ReactNoopUpdateQueue = {
+  //  检查这个复合组件是否挂载
   /**
    * Checks whether or not this composite component is mounted.
    * @param {ReactClass} publicInstance The instance we want to test.
@@ -279,10 +280,15 @@ var ReactNoopUpdateQueue = {
    * @protected
    * @final
    */
+  //  入参是组件实例
   isMounted: function (publicInstance) {
     return false;
   },
 
+  //  强制刷新，前提是不能在dom 变更的过程中更新
+
+  //  你可能会想在某些无法使用setState更新状态的情况下强制刷新状态，
+  //  forceUpdate无法触发shouldComponentUpdate，但是会触发componentWillUpdate和componentDidUpdate
   /**
    * Forces an update. This should only be invoked when it is known with
    * certainty that we are **not** in a DOM transaction.
@@ -298,6 +304,7 @@ var ReactNoopUpdateQueue = {
    * @param {?string} callerName name of the calling function in the public API.
    * @internal
    */
+  //  队列空调用的警告
   enqueueForceUpdate: function (publicInstance, callback, callerName) {
     warnNoop(publicInstance, 'forceUpdate');
   },
@@ -315,10 +322,12 @@ var ReactNoopUpdateQueue = {
    * @param {?string} callerName name of the calling function in the public API.
    * @internal
    */
+  //  更新所有的状态，始终使用这个或者setState来改变状态，应该把this.state当作不可变的
   enqueueReplaceState: function (publicInstance, completeState, callback, callerName) {
     warnNoop(publicInstance, 'replaceState');
   },
 
+  //  设置状态的子集，这个提供merge策略，不支持深度复制，下一阶段：暴露pendingState或者在合并阶段不实用
   /**
    * Sets a subset of the state. This only exists because _pendingState is
    * internal. This provides a merging strategy that is not available to deep
@@ -336,7 +345,9 @@ var ReactNoopUpdateQueue = {
   }
 };
 
+//  定义空对象
 var emptyObject = {};
+//  冻起来
 {
   Object.freeze(emptyObject);
 }
@@ -348,15 +359,23 @@ var emptyObject = {};
 function Component(props, context, updater) {
   this.props = props;
   this.context = context;
+  //  如果组件使用字符串的refs,我们将会指定一个不同的对象
   // If a component has string refs, we will assign a different object later.
   this.refs = emptyObject;
+  //  初始化默认的更新器，真实的更新器将会在渲染器内注入
   // We initialize the default updater but the real one gets injected by the
   // renderer.
   this.updater = updater || ReactNoopUpdateQueue;
 }
 
+//  定义原型属性
 Component.prototype.isReactComponent = {};
 
+//  设置状态的子集，始终使用this去改变状态，需要把this.sate当成正常状态下不可变的
+//  并不保证this.state会马上更新，先设置再取值可能返回的是老值
+//  并不保证setState的调用是同步的，因为多个调用最终会被合并，你可以提供一个可选的回调，在setStates事实上完成之后调用
+//  当一个函数传递给setState时，它将在未来的某个时间点被调用，并且使用最新的参数（state,props,context等）这心值可能跟this.xxx不一样
+//  因为你的函数是在receiveProps之后，shouldComponentUpdate之前调用的，在这个新阶段，props和context并没有赋值给this
 /**
  * Sets a subset of the state. Always use this to mutate
  * state. You should treat `this.state` as immutable.
@@ -384,9 +403,14 @@ Component.prototype.isReactComponent = {};
  */
 Component.prototype.setState = function (partialState, callback) {
   //  void 0 === undefined 省字节，同时防止undefined被注入
+  //  partialState需要是对象，函数或者null
   !(typeof partialState === 'object' || typeof partialState === 'function' || partialState == null) ? invariant(false, 'setState(...): takes an object of state variables to update or a function which returns an object of state variables.') : void 0;
+  //  进入队列状态更新
   this.updater.enqueueSetState(this, partialState, callback, 'setState');
 };
+
+//  强制刷新，该方法只能在非DOM转化态的时候调用
+//  在一些深层状态改变但是setState没有被调用的时候使用，该方法不会调用shouldComponentUpdate，但componentWillUpdate和componentDidUpdate会被调用
 
 /**
  * Forces an update. This should only be invoked when it is known with
@@ -406,6 +430,7 @@ Component.prototype.forceUpdate = function (callback) {
   this.updater.enqueueForceUpdate(this, callback, 'forceUpdate');
 };
 
+//  废弃的api,这些api只会在经典的类组件上存在，我们将会遗弃它们。我们并不会直接移除他们，而是定义getter,并抛错
 /**
  * Deprecated APIs. These APIs used to exist on classic React classes but since
  * we would like to deprecate them, we're not going to move them over to this
@@ -416,6 +441,7 @@ Component.prototype.forceUpdate = function (callback) {
     isMounted: ['isMounted', 'Instead, make sure to clean up subscriptions and pending requests in ' + 'componentWillUnmount to prevent memory leaks.'],
     replaceState: ['replaceState', 'Refactor your code to use setState instead (see ' + 'https://github.com/facebook/react/issues/3236).']
   };
+  //  定义遗弃api的告警函数
   var defineDeprecationWarning = function (methodName, info) {
     Object.defineProperty(Component.prototype, methodName, {
       get: function () {
@@ -424,6 +450,7 @@ Component.prototype.forceUpdate = function (callback) {
       }
     });
   };
+  //  依次注入getter
   for (var fnName in deprecatedAPIs) {
     if (deprecatedAPIs.hasOwnProperty(fnName)) {
       defineDeprecationWarning(fnName, deprecatedAPIs[fnName]);
@@ -431,28 +458,44 @@ Component.prototype.forceUpdate = function (callback) {
   }
 }
 
+//  假组件，原型是真组件的原型
 function ComponentDummy() {}
 ComponentDummy.prototype = Component.prototype;
 
 /**
  * Convenience component with default shallow equality check for sCU.
  */
+//  一个方便的组件，默认浅相等校验，其实是构造函数
 function PureComponent(props, context, updater) {
   this.props = props;
   this.context = context;
+  //  如果有字符串类型的ref,我们将在稍后指派一个不同的对象
   // If a component has string refs, we will assign a different object later.
   this.refs = emptyObject;
   this.updater = updater || ReactNoopUpdateQueue;
 }
 
+//  纯粹的组件原型
 var pureComponentPrototype = PureComponent.prototype = new ComponentDummy();
+//  定义纯粹组件原型的构造函数
 pureComponentPrototype.constructor = PureComponent;
 // Avoid an extra prototype jump for these methods.
+//  原型上再次注入Component的原型
 _assign(pureComponentPrototype, Component.prototype);
+//  标志位，判断是纯粹组件
 pureComponentPrototype.isPureReactComponent = true;
 
 // an immutable object with a single mutable value
+//  一个不可变的对象，一个不可变的值
+
+// 被封闭对象仍旧全等该对象本身
+// 可以通过Object.isSealed来判断当前对象是否被封闭
+// 不能为被封闭对象添加任何未知属性, 也不能为其已知属性添加访问者
+// 可以修改已知的属性
+
+//  https://www.jianshu.com/p/96220f921272
 function createRef() {
+  //  只有current一个属性
   var refObject = {
     current: null
   };
@@ -465,6 +508,7 @@ function createRef() {
 /**
  * Keeps track of the current dispatcher.
  */
+//  跟踪当前的分发者
 var ReactCurrentDispatcher = {
   /**
    * @internal
@@ -479,6 +523,7 @@ var ReactCurrentDispatcher = {
  * The current owner is the component who should own any components that are
  * currently being constructed.
  */
+//  跟踪react当前的所有者，指的是所有正在构造的组件的父组件
 var ReactCurrentOwner = {
   /**
    * @internal
@@ -487,8 +532,9 @@ var ReactCurrentOwner = {
   current: null
 };
 
+//  正则，匹配...加正反斜杆
 var BEFORE_SLASH_RE = /^(.*)[\\\/]/;
-
+//  描述组件的框架（位置）
 var describeComponentFrame = function (name, source, ownerName) {
   var sourceInfo = '';
   if (source) {
@@ -498,6 +544,7 @@ var describeComponentFrame = function (name, source, ownerName) {
     {
       // In DEV, include code for a common special case:
       // prefer "folder/index.js" instead of just "index.js".
+      //  在开发环境下，如果文件名为index 输出带一级路径的文件名
       if (/^index\./.test(fileName)) {
         //  解析出反斜杠前的文件名
         var match = path.match(BEFORE_SLASH_RE);
