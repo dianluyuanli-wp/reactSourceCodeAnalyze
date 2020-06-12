@@ -532,7 +532,9 @@ var ReactCurrentOwner = {
   current: null
 };
 
-//  正则，匹配...加正反斜杆
+//  正则，匹配任意内容加正反斜杆
+//  括号内的内容是分组 https://www.jianshu.com/p/f09508c14e65
+//  match如果是全局匹配，返回的是所有的匹配项，如果不是返回的是匹配字符串，位置，原始输入，如果有分组，第二项是匹配的分组
 var BEFORE_SLASH_RE = /^(.*)[\\\/]/;
 //  描述组件的框架（位置）
 var describeComponentFrame = function (name, source, ownerName) {
@@ -563,18 +565,22 @@ var describeComponentFrame = function (name, source, ownerName) {
   } else if (ownerName) {
     sourceInfo = ' (created by ' + ownerName + ')';
   }
+
   return '\n    in ' + (name || 'Unknown') + sourceInfo;
 };
 
 var Resolved = 1;
 
-
+//  使已经resolved的懒组价更加优雅
 function refineResolvedLazyComponent(lazyComponent) {
+  //  如果已经resolved,返回结果
   return lazyComponent._status === Resolved ? lazyComponent._result : null;
 }
 
+//  获取包裹的名字
 function getWrappedName(outerType, innerType, wrapperName) {
   var functionName = innerType.displayName || innerType.name || '';
+  //  优先是outerType的displayName,否则是wrapperName和functionName的组合
   return outerType.displayName || (functionName !== '' ? wrapperName + '(' + functionName + ')' : wrapperName);
 }
 
@@ -582,13 +588,16 @@ function getWrappedName(outerType, innerType, wrapperName) {
 function getComponentName(type) {
   if (type == null) {
     // Host root, text node or just invalid type.
+    //  如果是根，文字节点或不存在的类型，返回null
     return null;
   }
   {
+    //  如果type的tag是数字
     if (typeof type.tag === 'number') {
       warningWithoutStack$1(false, 'Received an unexpected object in getComponentName(). ' + 'This is likely a bug in React. Please file an issue.');
     }
   }
+  //  如果是构造函数，看他的静态属性displayName或者name
   if (typeof type === 'function') {
     return type.displayName || type.name || null;
   }
