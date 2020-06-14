@@ -40,6 +40,7 @@ var REACT_CONCURRENT_MODE_TYPE = hasSymbol ? Symbol.for('react.concurrent_mode')
 var REACT_FORWARD_REF_TYPE = hasSymbol ? Symbol.for('react.forward_ref') : 0xead0;
 var REACT_SUSPENSE_TYPE = hasSymbol ? Symbol.for('react.suspense') : 0xead1;
 var REACT_MEMO_TYPE = hasSymbol ? Symbol.for('react.memo') : 0xead3;
+//  懒加载标记
 var REACT_LAZY_TYPE = hasSymbol ? Symbol.for('react.lazy') : 0xead4;
 
 //  定义symbol,如果不支持的话会用兜底方案
@@ -601,16 +602,20 @@ function getComponentName(type) {
   if (typeof type === 'function') {
     return type.displayName || type.name || null;
   }
+  //  如果是字符串直接返回
   if (typeof type === 'string') {
     return type;
   }
   switch (type) {
+    //  如果是react当前的节点,这些都是当初symbol定义的
     case REACT_CONCURRENT_MODE_TYPE:
       return 'ConcurrentMode';
     case REACT_FRAGMENT_TYPE:
       return 'Fragment';
+    //  如果是入口
     case REACT_PORTAL_TYPE:
       return 'Portal';
+    //  如果是分析器
     case REACT_PROFILER_TYPE:
       return 'Profiler';
     case REACT_STRICT_MODE_TYPE:
@@ -618,19 +623,25 @@ function getComponentName(type) {
     case REACT_SUSPENSE_TYPE:
       return 'Suspense';
   }
+  //  如果type是对象
   if (typeof type === 'object') {
+    //  按照$$typeof来判断
     switch (type.$$typeof) {
       case REACT_CONTEXT_TYPE:
         return 'Context.Consumer';
       case REACT_PROVIDER_TYPE:
         return 'Context.Provider';
+      //  如果是前向ref
       case REACT_FORWARD_REF_TYPE:
         return getWrappedName(type, type.render, 'ForwardRef');
+      //  如果是memo类型，递归调用自己
       case REACT_MEMO_TYPE:
         return getComponentName(type.type);
+      //  如果是lazy类型
       case REACT_LAZY_TYPE:
         {
           var thenable = type;
+          //  细化解析惰性组件
           var resolvedThenable = refineResolvedLazyComponent(thenable);
           if (resolvedThenable) {
             return getComponentName(resolvedThenable);
@@ -638,14 +649,17 @@ function getComponentName(type) {
         }
     }
   }
+  //  最后返回null
   return null;
 }
 
+//  react正在debug的frame
 var ReactDebugCurrentFrame = {};
 
 //  当前正在验证的元素
 var currentlyValidatingElement = null;
 
+//  设置当前正在验证的元素
 function setCurrentlyValidatingElement(element) {
   {
     currentlyValidatingElement = element;
@@ -653,20 +667,27 @@ function setCurrentlyValidatingElement(element) {
 }
 
 {
+  //  堆栈的实现是通过当前的renderer注入的
   // Stack implementation injected by the current renderer.
   ReactDebugCurrentFrame.getCurrentStack = null;
 
+  //  增加枚举的方法
   ReactDebugCurrentFrame.getStackAddendum = function () {
     var stack = '';
 
     // Add an extra top frame while an element is being validated
+    //  增加一个额外的顶层框架，如果当前有元素正在被验证
     if (currentlyValidatingElement) {
+      //  获取元素的名字
       var name = getComponentName(currentlyValidatingElement.type);
+      //  获取元素所有者
       var owner = currentlyValidatingElement._owner;
+      //  获取源的目录位置
       stack += describeComponentFrame(name, currentlyValidatingElement._source, owner && getComponentName(owner.type));
     }
 
     // Delegate to the injected renderer-specific implementation
+    //  转交给renderer中的特殊实现来获取堆栈
     var impl = ReactDebugCurrentFrame.getCurrentStack;
     if (impl) {
       stack += impl() || '';
@@ -676,15 +697,20 @@ function setCurrentlyValidatingElement(element) {
   };
 }
 
+//  react分享的内部构件
 var ReactSharedInternals = {
+  //  当前的分发者
   ReactCurrentDispatcher: ReactCurrentDispatcher,
+  //  当前的所有者
   ReactCurrentOwner: ReactCurrentOwner,
+  //  Object.assign避免在UMD下被打包两次
   // Used by renderers to avoid bundling object-assign twice in UMD bundles:
   assign: _assign
 };
 
 {
   _assign(ReactSharedInternals, {
+    //  在生产环境不应该有
     // These should not be included in production.
     ReactDebugCurrentFrame: ReactDebugCurrentFrame,
     // Shim for React DOM 16.0.0 which still destructured (but not used) this.
