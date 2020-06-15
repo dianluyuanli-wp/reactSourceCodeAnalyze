@@ -672,6 +672,7 @@ function setCurrentlyValidatingElement(element) {
   ReactDebugCurrentFrame.getCurrentStack = null;
 
   //  增加枚举的方法
+  //  本质上是返回调用堆栈
   ReactDebugCurrentFrame.getStackAddendum = function () {
     var stack = '';
 
@@ -715,10 +716,12 @@ var ReactSharedInternals = {
     ReactDebugCurrentFrame: ReactDebugCurrentFrame,
     // Shim for React DOM 16.0.0 which still destructured (but not used) this.
     // TODO: remove in React 17.0.
+    //  react树形钩子
     ReactComponentTreeHook: {}
   });
 }
 
+//  类似于不变性的警告，只有在条件不满足的时候才打印
 /**
  * Similar to invariant but only logs a warning if the condition is not met.
  * This can be used to log issues in development environments in critical
@@ -726,27 +729,33 @@ var ReactSharedInternals = {
  * same logic and follow the same code paths.
  */
 
+ // 首先赋值warningWithoutStack$1
 var warning = warningWithoutStack$1;
 
+//  本质上是带调用栈的warning方法
 {
+  //  第二个条件是格式化
   warning = function (condition, format) {
     if (condition) {
       return;
     }
+    //  获取当前的调用序列
     var ReactDebugCurrentFrame = ReactSharedInternals.ReactDebugCurrentFrame;
     var stack = ReactDebugCurrentFrame.getStackAddendum();
     // eslint-disable-next-line react-internal/warning-and-invariant-args
 
+    //  拼装后面的参数
     for (var _len = arguments.length, args = Array(_len > 2 ? _len - 2 : 0), _key = 2; _key < _len; _key++) {
       args[_key - 2] = arguments[_key];
     }
-
+    //  复用原来的warning方法，前面的内容照旧，后面的内容拼上调用序列的信息
     warningWithoutStack$1.apply(undefined, [false, format + '%s'].concat(args, [stack]));
   };
 }
 
 var warning$1 = warning;
 
+//  定义hasOwnProperty方法
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 
 //  属性保留字
@@ -757,22 +766,30 @@ var RESERVED_PROPS = {
   __source: true
 };
 
+//  特殊的属性key展示告警
+// void 0 就是undefined
 var specialPropKeyWarningShown = void 0;
 var specialPropRefWarningShown = void 0;
 
 //  排除ref是warning的情况，判断是否存在ref
 function hasValidRef(config) {
   {
+    //  如果config有ref自有属性属性
     if (hasOwnProperty.call(config, 'ref')) {
+      //  获取get方法
       var getter = Object.getOwnPropertyDescriptor(config, 'ref').get;
+      //  如果这个getter是warning的，返回false
       if (getter && getter.isReactWarning) {
         return false;
       }
     }
   }
+  //  否则根据是否undefined来判断
   return config.ref !== undefined;
 }
 
+//  是否具有可用属性
+//  逻辑跟ref的很相似
 function hasValidKey(config) {
   {
     if (hasOwnProperty.call(config, 'key')) {
@@ -785,20 +802,26 @@ function hasValidKey(config) {
   return config.key !== undefined;
 }
 
+//  定义key属性的warning Getter
 function defineKeyPropWarningGetter(props, displayName) {
+  //  关于访问key的告警
   var warnAboutAccessingKey = function () {
     if (!specialPropKeyWarningShown) {
       specialPropKeyWarningShown = true;
+      //  key不能作为参数获取，被react内部征用了
       warningWithoutStack$1(false, '%s: `key` is not a prop. Trying to access it will result ' + 'in `undefined` being returned. If you need to access the same ' + 'value within the child component, you should pass it as a different ' + 'prop. (https://fb.me/react-special-props)', displayName);
     }
   };
+  //  这个函数定义为react warngin
   warnAboutAccessingKey.isReactWarning = true;
+  //  给入参的key属性定义getter，避免外界访问
   Object.defineProperty(props, 'key', {
     get: warnAboutAccessingKey,
     configurable: true
   });
 }
 
+//  这部分内容跟key的非常类似
 //  定义ref的获取方法
 function defineRefPropWarningGetter(props, displayName) {
   var warnAboutAccessingRef = function () {
@@ -814,6 +837,12 @@ function defineRefPropWarningGetter(props, displayName) {
   });
 }
 
+//  定义一个创建react 元素的工厂函数，这跟class模式的组建不一样，请不要使用new来调用，所有instanceof来检查是失效的，不要使用要用Symbol.for('react.element')，而要用$$typeof来检查，
+//  来判断是否是react组件
+
+//  sele是一个暂时的变量，是用来判断当React.createElement被调用的时候this和owner是否一致，以便我们告警。我们打算摆脱owner这个概念并且
+//  使用箭头函数，只要这个二者一致，组件就没有变化
+//  source是一个注释对象（被转译器或者其他文件名，行数，等信息所添加）
 /**
  * Factory method to create a new React element. This no longer adheres to
  * the class pattern, so do not use new to call it. Also, no instanceof check
@@ -838,36 +867,47 @@ function defineRefPropWarningGetter(props, displayName) {
  // react元素工厂函数，或者叫原型
 var ReactElement = function (type, key, ref, self, source, owner, props) {
   var element = {
+    //  通过这个标签来识别react的元素
     // This tag allows us to uniquely identify this as a React Element
     $$typeof: REACT_ELEMENT_TYPE,
 
+    //  属于这个元素的内建属性
     // Built-in properties that belong on the element
     type: type,
     key: key,
     ref: ref,
     props: props,
 
+    //  记录创建这个组件的组件
     // Record the component responsible for creating this element.
     _owner: owner
   };
 
   {
+    //  这个验证标志是可变的，我们把这个放在外部支持存储，以便我们能够冻结整个对象，
+    //  这个可以被若映射替代，一旦在开发环境下实现了
+
     // The validation flag is currently mutative. We put it on
     // an external backing store so that we can freeze the whole object.
     // This can be replaced with a WeakMap once they are implemented in
     // commonly used development environments.
     element._store = {};
 
+    // 为了更加方便地进行测试，我们设置了一个不可隐藏的验证标志位，以便测试框架忽略它
     // To make comparing ReactElements easier for testing purposes, we make
     // the validation flag non-enumerable (where possible, which should
     // include every environment we run tests in), so the test framework
     // ignores it.
+
+    //  给_store设置validated属性false
     Object.defineProperty(element._store, 'validated', {
       configurable: false,
       enumerable: false,
       writable: true,
       value: false
     });
+    //  self和source都是开发环境才存在的
+
     // self and source are DEV only properties.
     Object.defineProperty(element, '_self', {
       configurable: false,
@@ -875,6 +915,8 @@ var ReactElement = function (type, key, ref, self, source, owner, props) {
       writable: false,
       value: self
     });
+    //  两个再不同地方创建的元素从测试的角度来看是相等的，我们在列举的时候忽略他们
+
     // Two elements created in two different places should be considered
     // equal for testing purposes and therefore we hide it from enumeration.
     Object.defineProperty(element, '_source', {
@@ -883,6 +925,7 @@ var ReactElement = function (type, key, ref, self, source, owner, props) {
       writable: false,
       value: source
     });
+    //  如果Object有freeze的实现，我们冻结元素和它的属性
     if (Object.freeze) {
       Object.freeze(element.props);
       Object.freeze(element);
@@ -892,6 +935,7 @@ var ReactElement = function (type, key, ref, self, source, owner, props) {
   return element;
 };
 
+//  返回并创建指定类型的reactElement
 /**
  * Create and return a new ReactElement of the given type.
  * See https://reactjs.org/docs/react-api.html#createelement
