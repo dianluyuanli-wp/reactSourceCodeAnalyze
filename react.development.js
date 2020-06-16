@@ -865,6 +865,7 @@ function defineRefPropWarningGetter(props, displayName) {
  */
 
  // react元素工厂函数，或者叫原型
+ // 返回的其实是element对象
 var ReactElement = function (type, key, ref, self, source, owner, props) {
   var element = {
     //  通过这个标签来识别react的元素
@@ -941,9 +942,12 @@ var ReactElement = function (type, key, ref, self, source, owner, props) {
  * See https://reactjs.org/docs/react-api.html#createelement
  */
 function createElement(type, config, children) {
+  //  属性名 void 0就是undefined
   var propName = void 0;
 
   // Reserved names are extracted
+
+  //  被保护的名字被屏蔽
   var props = {};
 
   var key = null;
@@ -951,15 +955,19 @@ function createElement(type, config, children) {
   var self = null;
   var source = null;
 
+  //  根据confi的内容来初始化
   if (config != null) {
+    //  如果有可用的ref,将其赋值给ref变量
     if (hasValidRef(config)) {
       ref = config.ref;
     }
+    //  如果有可用的key,将其赋值给key
     if (hasValidKey(config)) {
       key = '' + config.key;
     }
-
+    //  再给self赋值
     self = config.__self === undefined ? null : config.__self;
+    //  给source赋值
     source = config.__source === undefined ? null : config.__source;
     // Remaining properties are added to a new props object
     for (propName in config) {
@@ -970,9 +978,12 @@ function createElement(type, config, children) {
     }
   }
 
+  //  子元素会有不止一个，这些将会通过一个属性对象向下传递
+
   // Children can be more than one argument, and those are transferred onto
   // the newly allocated props object.
   //  复制子元素
+  //  给props属性添加children属性
   var childrenLength = arguments.length - 2;
   if (childrenLength === 1) {
     props.children = children;
@@ -982,6 +993,7 @@ function createElement(type, config, children) {
       childArray[i] = arguments[i + 2];
     }
     {
+      //  冻结子元素列表
       if (Object.freeze) {
         Object.freeze(childArray);
       }
@@ -990,9 +1002,10 @@ function createElement(type, config, children) {
   }
 
   // Resolve default props
+  //  解析默认属性，如果type上存在默认属性
   if (type && type.defaultProps) {
     var defaultProps = type.defaultProps;
-    //  如果没有属性值，采用默认属性
+    //  如果没有属性值，采用type类型默认属性上的默认值
     for (propName in defaultProps) {
       if (props[propName] === undefined) {
         props[propName] = defaultProps[propName];
@@ -1002,6 +1015,7 @@ function createElement(type, config, children) {
   {
     if (key || ref) {
       //  这里的type估计是个构造函数对象
+      //  如果type是个构造函数
       var displayName = typeof type === 'function' ? type.displayName || type.name || 'Unknown' : type;
       if (key) {
         //  避免保护参数被错误取到，提供警告
@@ -1012,50 +1026,64 @@ function createElement(type, config, children) {
       }
     }
   }
+  //  返回创建的元素
+  //  type是直接透传的，key,ref等等都是从config里面解析出来的，props是由config上的参数，type上的参数（如果有的话），children等组合而成
   return ReactElement(type, key, ref, self, source, ReactCurrentOwner.current, props);
 }
 
+//  返回一个可以创建指定类型的react元素的函数
 /**
  * Return a function that produces ReactElements of a given type.
  * See https://reactjs.org/docs/react-api.html#createfactory
  */
 
-
+//  克隆并且替换key
 function cloneAndReplaceKey(oldElement, newKey) {
+  //  其实就是替换调key,其他不变
   var newElement = ReactElement(oldElement.type, newKey, oldElement.ref, oldElement._self, oldElement._source, oldElement._owner, oldElement.props);
 
   return newElement;
 }
 
+//  克隆并返回一个新的react元素，目标元素将作为起始点
 /**
  * Clone and return a new ReactElement using element as the starting point.
  * See https://reactjs.org/docs/react-api.html#cloneelement
  */
 function cloneElement(element, config, children) {
+  //  如果element是null或者undefined，抛出不可用的错误
   !!(element === null || element === undefined) ? invariant(false, 'React.cloneElement(...): The argument must be a React element, but you passed %s.', element) : void 0;
-
+  //  属性名
   var propName = void 0;
 
   // Original props are copied
+  //  复制原始属性
   var props = _assign({}, element.props);
 
   // Reserved names are extracted
+  //  受保护的属性被单独提取出来
   var key = element.key;
   var ref = element.ref;
+  //  self受保护是因为owner受保护
   // Self is preserved since the owner is preserved.
   var self = element._self;
+  //  source受保护是因为克隆一个元素并不是一个转译操作，原始的源对真实的父元素来说可能是一个更好的标志
   // Source is preserved since cloneElement is unlikely to be targeted by a
   // transpiler, and the original source is probably a better indicator of the
   // true owner.
   var source = element._source;
 
   // Owner will be preserved, unless ref is overridden
+  //  owner将会被保护，除非ref被复写
   var owner = element._owner;
 
   if (config != null) {
+    //  如果存在config,那么其中的值将会覆盖刚才定义的变量
     if (hasValidRef(config)) {
       // Silently steal the ref from the parent.
+      //  静默封装从父元素存底来的ref
       ref = config.ref;
+      //  修改owner
       owner = ReactCurrentOwner.current;
     }
     if (hasValidKey(config)) {
@@ -1063,17 +1091,22 @@ function cloneElement(element, config, children) {
     }
 
     // Remaining properties override existing props
+    //  剩下的属性将会复现现存的属性
     var defaultProps = void 0;
     if (element.type && element.type.defaultProps) {
+      //  element.type上的默认属性赋值给defaultProps
       defaultProps = element.type.defaultProps;
     }
     //  属性复制
     for (propName in config) {
+      //  如果该属性是config自有的并且不是react的保留属性
       if (hasOwnProperty.call(config, propName) && !RESERVED_PROPS.hasOwnProperty(propName)) {
+        //  如果config中没有值并且默认属性的值存在就从默认属性中赋值
         if (config[propName] === undefined && defaultProps !== undefined) {
           // Resolve default props
           props[propName] = defaultProps[propName];
         } else {
+          //  否则复制config中的值
           props[propName] = config[propName];
         }
       }
@@ -1082,6 +1115,8 @@ function cloneElement(element, config, children) {
 
   // Children can be more than one argument, and those are transferred onto
   // the newly allocated props object.
+  //  复制子元素，逻辑类似先前
+  //  children挂在props上，透传
   var childrenLength = arguments.length - 2;
   if (childrenLength === 1) {
     props.children = children;
@@ -1096,6 +1131,7 @@ function cloneElement(element, config, children) {
   return ReactElement(element.type, key, ref, self, source, owner, props);
 }
 
+//  判断一个对象是否是react元素
 /**
  * Verifies the object is a ReactElement.
  * See https://reactjs.org/docs/react-api.html#isvalidelement
@@ -1103,6 +1139,7 @@ function cloneElement(element, config, children) {
  * @return {boolean} True if `object` is a ReactElement.
  * @final
  */
+//  首先是对象，其次不是null，再次$$typeoff为REACT_ELEMENT_TYPE
 function isValidElement(object) {
   return typeof object === 'object' && object !== null && object.$$typeof === REACT_ELEMENT_TYPE;
 }
@@ -1110,13 +1147,14 @@ function isValidElement(object) {
 var SEPARATOR = '.';
 var SUBSEPARATOR = ':';
 
+//  提取并且包裹key，使他可以用为reactid
 /**
  * Escape and wrap key so it is safe to use as a reactid
  *
  * @param {string} key to be escaped.
  * @return {string} the escaped key.
  */
-//  包裹并且生成组件的id
+//  替换key
 function escape(key) {
   var escapeRegex = /[=:]/g;
   var escaperLookup = {
@@ -1135,6 +1173,7 @@ function escape(key) {
  * pattern.
  */
 
+ // 关于映射的警告
 var didWarnAboutMaps = false;
 
 //  匹配一个或多个/符号 给所有的/符号加一个/
