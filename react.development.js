@@ -28,6 +28,7 @@ var ReactVersion = '16.8.6';
 var hasSymbol = typeof Symbol === 'function' && Symbol.for;
 
 //  Symbol.for 以字符串为key,创建symbol,如果以前有，使用以前的，否则新建一个
+//  这些都是react内部的api,不清楚的可以官网去查
 var REACT_ELEMENT_TYPE = hasSymbol ? Symbol.for('react.element') : 0xeac7;
 var REACT_PORTAL_TYPE = hasSymbol ? Symbol.for('react.portal') : 0xeaca;
 var REACT_FRAGMENT_TYPE = hasSymbol ? Symbol.for('react.fragment') : 0xeacb;
@@ -537,7 +538,7 @@ var ReactCurrentOwner = {
 //  括号内的内容是分组 https://www.jianshu.com/p/f09508c14e65
 //  match如果是全局匹配，返回的是所有的匹配项，如果不是返回的是匹配字符串，位置，原始输入，如果有分组，第二项是匹配的分组
 var BEFORE_SLASH_RE = /^(.*)[\\\/]/;
-//  描述组件的框架（位置）
+//  描述组件的引用位置
 var describeComponentFrame = function (name, source, ownerName) {
   var sourceInfo = '';
   if (source) {
@@ -547,7 +548,7 @@ var describeComponentFrame = function (name, source, ownerName) {
     {
       // In DEV, include code for a common special case:
       // prefer "folder/index.js" instead of just "index.js".
-      //  在开发环境下，如果文件名为index 输出带一级路径的文件名
+      //  在开发环境下，如果文件名为index 输出带上一级路径的文件名
       if (/^index\./.test(fileName)) {
         //  解析出反斜杠前的文件名
         var match = path.match(BEFORE_SLASH_RE);
@@ -689,6 +690,7 @@ function setCurrentlyValidatingElement(element) {
 
     // Delegate to the injected renderer-specific implementation
     //  转交给renderer中的特殊实现来获取堆栈
+    //  如果getCurrentStack被复写，追加该方法提供的信息
     var impl = ReactDebugCurrentFrame.getCurrentStack;
     if (impl) {
       stack += impl() || '';
@@ -1174,6 +1176,7 @@ function escape(key) {
  */
 
  // 关于映射的警告
+ // 控制这种报错只出现一次
 var didWarnAboutMaps = false;
 
 //  匹配一个或多个/符号 给所有的/符号加一个/
@@ -1182,13 +1185,18 @@ function escapeUserProvidedKey(text) {
   //  $&表示之前匹配中的串
   return ('' + text).replace(userProvidedKeyEscapeRegex, '$&/');
 }
+//  
 
 //  维护一个池子  这玩意儿感觉是共用的，每次调用的时候把函数往下传，或者返回一个空的
 var POOL_SIZE = 10;
 var traverseContextPool = [];
+//  获得合并的传递的上下文
+//  mapResult其实是处理过后的子元素的数组
 function getPooledTraverseContext(mapResult, keyPrefix, mapFunction, mapContext) {
+  //  如果有上下文，返回最后一个
   if (traverseContextPool.length) {
     var traverseContext = traverseContextPool.pop();
+    //  将相应的值改成传入的值
     traverseContext.result = mapResult;
     traverseContext.keyPrefix = keyPrefix;
     traverseContext.func = mapFunction;
@@ -1196,6 +1204,7 @@ function getPooledTraverseContext(mapResult, keyPrefix, mapFunction, mapContext)
     traverseContext.count = 0;
     return traverseContext;
   } else {
+    //  否则根据入参返回一个新的
     return {
       result: mapResult,
       keyPrefix: keyPrefix,
@@ -1206,6 +1215,7 @@ function getPooledTraverseContext(mapResult, keyPrefix, mapFunction, mapContext)
   }
 }
 
+//  释放一个上下文，小于上限的话就往池子里push
 function releaseTraverseContext(traverseContext) {
   traverseContext.result = null;
   traverseContext.keyPrefix = null;
@@ -1227,10 +1237,13 @@ function releaseTraverseContext(traverseContext) {
  * @return {!number} The number of children in this subtree.
  */
 
- // 这个是个递归函数，来统计子节点数目？
+ // 这个是个递归函数，来统计子节点数目，也会执行回调
+ // 遍历所有子节点的接口实现
+ // traverseContext这个上线文本质上就是一个存储处理结果的对象
 function traverseAllChildrenImpl(children, nameSoFar, callback, traverseContext) {
+  //  获取children的类型
   var type = typeof children;
-
+  //  如果类型为undifined或者布尔，children为null
   if (type === 'undefined' || type === 'boolean') {
     // All of the above are perceived as null.
     children = null;
@@ -1238,6 +1251,7 @@ function traverseAllChildrenImpl(children, nameSoFar, callback, traverseContext)
 
   var invokeCallback = false;
 
+  //  如果type为undefined、boolean、string、number、REACT_ELEMENT_TYPE、REACT_PORTAL_TYPE时，表示已经调用到底层元素，要调用回调
   if (children === null) {
     invokeCallback = true;
   } else {
@@ -1257,51 +1271,72 @@ function traverseAllChildrenImpl(children, nameSoFar, callback, traverseContext)
 
   if (invokeCallback) {
     //  使用上级传下来的上下文跑一下回调，同时计数，第三个参数，累加当前的组件名
+    //  针对mapIntoWithKeyPrefixInternal，这个callback其实是mapSingleChildIntoContext
     callback(traverseContext, children,
     // If it's the only child, treat the name as if it was wrapped in an array
     // so that it's consistent if the number of children grows.
+
+    //  如果这是唯一的子元素，把这个名字当做包裹在数组里面的处理，是的子元素增加的时候保持名字不变
     nameSoFar === '' ? SEPARATOR + getComponentKey(children, 0) : nameSoFar);
+    //  返回计数1
     return 1;
   }
 
   var child = void 0;
+  //  往下传递的名字
   var nextName = void 0;
+  //  当前子树下子元素的节点个数
   var subtreeCount = 0; // Count of children found in the current subtree.
+  //  下一个名字的前缀，如果当前的名字是空串，设置为.,否则是当前的名字+分隔符：
   var nextNamePrefix = nameSoFar === '' ? SEPARATOR : nameSoFar + SUBSEPARATOR;
 
   //  数组的话继续递归
   if (Array.isArray(children)) {
     for (var i = 0; i < children.length; i++) {
       child = children[i];
+      //  拼出下一个名字
       nextName = nextNamePrefix + getComponentKey(child, i);
+      //  递归调用，获得当前子树下挂载的节点数
       subtreeCount += traverseAllChildrenImpl(child, nextName, callback, traverseContext);
     }
   } else {
     //  如果是迭代器的话也继续递归
+    //  获取children的迭代器
     var iteratorFn = getIteratorFn(children);
     if (typeof iteratorFn === 'function') {
       {
         // Warn about using Maps as children
+        //  如果使用map当做子元素，报错
         if (iteratorFn === children.entries) {
+          //  控制这个报错只出现一次
           !didWarnAboutMaps ? warning$1(false, 'Using Maps as children is unsupported and will likely yield ' + 'unexpected results. Convert it to a sequence/iterable of keyed ' + 'ReactElements instead.') : void 0;
           didWarnAboutMaps = true;
         }
       }
 
+      //  获取迭代器的第一次结果
       var iterator = iteratorFn.call(children);
       var step = void 0;
       var ii = 0;
+      //  while循环不停跑，迭代器不停跑
       while (!(step = iterator.next()).done) {
+        //  获取下一个子元素
         child = step.value;
+        //  获取下一层的名字
         nextName = nextNamePrefix + getComponentKey(child, ii++);
+        //  继续跑递归
         subtreeCount += traverseAllChildrenImpl(child, nextName, callback, traverseContext);
       }
+    //  如果是不是REACT_ELEMENT_TYPE，REACT_PORTAL_TYPE类型的对象，就报错
     } else if (type === 'object') {
       var addendum = '';
       {
+        //  如果想要渲染子元素的集合，需要使用数组，末尾追加调用堆栈
         addendum = ' If you meant to render a collection of children, use an array ' + 'instead.' + ReactDebugCurrentFrame.getStackAddendum();
       }
+      //  children强制转string
       var childrenString = '' + children;
+      //  抛错
       invariant(false, 'Objects are not valid as a React child (found: %s).%s', childrenString === '[object Object]' ? 'object with keys {' + Object.keys(children).join(', ') + '}' : childrenString, addendum);
     }
   }
@@ -1309,6 +1344,9 @@ function traverseAllChildrenImpl(children, nameSoFar, callback, traverseContext)
   return subtreeCount;
 }
 
+//  遍历被指定为props.children的子元素，但是也可以通过属性指定
+//  traverseAllChildren(this.props.children, ...) traverseAllChildren(this.props.leftPanelChildren, ...)
+//  traverseContext是一个可选的参数，将在整个遍历过程中被传递，它可以用来存储状态或者回调函数能够用到的东西
 /**
  * Traverses children that are typically specified as `props.children`, but
  * might also be specified through attributes:
@@ -1331,10 +1369,11 @@ function traverseAllChildren(children, callback, traverseContext) {
   if (children == null) {
     return 0;
   }
-  //  第二个参数是当前的名字， 第三个参数是‘mapSingleChildIntoContext’
+  //  第二个参数是当前的名字， 第三个参数是‘mapSingleChildIntoContext’里面有当前处理过的子元素的结果数组result,和回调函数
   return traverseAllChildrenImpl(children, '', callback, traverseContext);
 }
 
+//  生成用来标识一个集合中的元素的key
 /**
  * Generate a key string that identifies a component within a set.
  *
@@ -1345,15 +1384,21 @@ function traverseAllChildren(children, callback, traverseContext) {
 function getComponentKey(component, index) {
   // Do some typechecking here since we call this blindly. We want to ensure
   // that we don't block potential future ES APIs.
+  //  在这里要做一些校验，因为我们调用的时候是处于黑箱中，我们想要确保不会屏蔽调未来ES标准的api
+
+  //  如果component是对象，其不为null并且存在key,则返回
   if (typeof component === 'object' && component !== null && component.key != null) {
     // Explicit key
+    //  生成转义后的key，$开头
     return escape(component.key);
   }
   // Implicit key determined by the index in the set
+  //  否则使用集合中的index来生成key
   return index.toString(36);
 }
 
 //  对单个子元素进行处理
+//  读取bookKeeping中的数据来调用函数
 function forEachSingleChild(bookKeeping, child, name) {
   var func = bookKeeping.func,
       context = bookKeeping.context;
@@ -1361,6 +1406,7 @@ function forEachSingleChild(bookKeeping, child, name) {
   func.call(context, child, bookKeeping.count++);
 }
 
+//  遍历被指定为props.children的子元素,提供的forEachFunc将会被每个叶子节点调用
 /**
  * Iterates through children that are typically specified as `props.children`.
  *
@@ -1386,23 +1432,30 @@ function forEachChildren(children, forEachFunc, forEachContext) {
 }
 
 //  把单个子元素映射到上下文中 这也是个递归 bookkeeping其实就是个上下文的实例
+//  其实就是给上下文对象的result中插入处理后的子元素
 function mapSingleChildIntoContext(bookKeeping, child, childKey) {
   var result = bookKeeping.result,
       keyPrefix = bookKeeping.keyPrefix,
       func = bookKeeping.func,
       context = bookKeeping.context;
 
-
+  //  获取处理过后的子元素，绑定上下文调用func,计数加1
   var mappedChild = func.call(context, child, bookKeeping.count++);
   if (Array.isArray(mappedChild)) {
+    //  如果是子元素的数组，使用key和固定前缀映射
+    //  这里本质上还是递归，mapIntoWithKeyPrefixInternal里面会调用mapSingleChildIntoContext
     mapIntoWithKeyPrefixInternal(mappedChild, result, childKey, function (c) {
       return c;
     });
   } else if (mappedChild != null) {
+    //  如果是单元素
     if (isValidElement(mappedChild)) {
+      //  获取映射过后的元素，其实是使用的克隆方法
       mappedChild = cloneAndReplaceKey(mappedChild,
+      //如果新key和老key不一样，则二者都保留，因为traverseAllChildren这个方法通常把对象视为子元素
       // Keep both the (mapped) and old keys if they differ, just as
       // traverseAllChildren used to do for objects as children
+      //  如果映射后的子元素有key,且原来元素的key不与之相同，则给mapped.key添加一个/,再拼接子元素的key
       keyPrefix + (mappedChild.key && (!child || child.key !== mappedChild.key) ? escapeUserProvidedKey(mappedChild.key) + '/' : '') + childKey);
     }
     //  处理后的子元素推到result里面
@@ -1425,6 +1478,8 @@ function mapIntoWithKeyPrefixInternal(children, array, prefix, func, context) {
   releaseTraverseContext(traverseContext);
 }
 
+//  映射所有被标识为props.children的元素
+//  每个叶子元素都会被mapFunction所调用
 /**
  * Maps children that are typically specified as `props.children`.
  *
@@ -1450,6 +1505,7 @@ function mapChildren(children, func, context) {
   return result;
 }
 
+//  计算被标识为props.children的节点的数目
 /**
  * Count the number of children that are typically specified as
  * `props.children`.
@@ -1462,11 +1518,13 @@ function mapChildren(children, func, context) {
 
  // 统计子元素数目
 function countChildren(children) {
+  //  遍历函数，callback啥也没干，上下文是null
   return traverseAllChildren(children, function () {
     return null;
   }, null);
 }
 
+//  拍平子元素对象，返回一个有合适key的子元素组成的数组
 /**
  * Flatten a children object (typically specified as `props.children`) and
  * return an array with appropriately re-keyed children.
@@ -1483,6 +1541,8 @@ function toArray(children) {
   return result;
 }
 
+//  返回集合的第一个元素并且验证该集合是否只有一个元素
+//  当前的实现是假设子元素外层是没有包裹的，但这个函数的目的是抽象出子元素的实际结构
 /**
  * Returns the first child in a collection of children and verifies that there
  * is only one child in the collection.
