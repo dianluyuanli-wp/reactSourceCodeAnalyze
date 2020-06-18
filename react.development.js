@@ -1564,17 +1564,23 @@ function onlyChild(children) {
 
 //  context的构造函数
 function createContext(defaultValue, calculateChangedBits) {
+  //  如果calculateChangedBits是undefined，设置为null
   if (calculateChangedBits === undefined) {
     calculateChangedBits = null;
   } else {
     {
+      //  可选的第二个参数是函数，如果不是的函数或者null的话报错
       !(calculateChangedBits === null || typeof calculateChangedBits === 'function') ? warningWithoutStack$1(false, 'createContext: Expected the optional second argument to be a ' + 'function. Instead received: %s', calculateChangedBits) : void 0;
     }
   }
 
   var context = {
+    //  定义类型
     $$typeof: REACT_CONTEXT_TYPE,
     _calculateChangedBits: calculateChangedBits,
+    //  为了支持多个并行的渲染器，我们把他们分为一级渲染器和二级渲染器，我们只允许同时
+    //  存在两个渲染器：react native是一级渲染器，fabric是二级渲染器，或者react DOM(一级渲染器)和react art（二级渲染器）
+    //  二级渲染器会在一个分开的域存储他们的上下文
     // As a workaround to support multiple concurrent renderers, we categorize
     // some renderers as primary and others as secondary. We only expect
     // there to be two concurrent renderers at most: React Native (primary) and
@@ -1582,45 +1588,60 @@ function createContext(defaultValue, calculateChangedBits) {
     // Secondary renderers store their context values on separate fields.
     _currentValue: defaultValue,
     _currentValue2: defaultValue,
+    //  以前为了追踪这个上下文有多少个并行的渲染器，有这个变量（就像并行的服务器渲染）
     // Used to track how many concurrent renderers this context currently
     // supports within in a single renderer. Such as parallel server rendering.
     _threadCount: 0,
     // These are circular
+    //  这两个变量是循环引用的
     Provider: null,
     Consumer: null
   };
 
   context.Provider = {
+    //  定义类型
     $$typeof: REACT_PROVIDER_TYPE,
+    //  搞了个循环引用，指向自己
     _context: context
   };
 
+  //  已经警告使用了嵌套的上下文消费者
   var hasWarnedAboutUsingNestedContextConsumers = false;
+  //  已经警告了使用消费者和提供者
   var hasWarnedAboutUsingConsumerProvider = false;
 
   {
+    //  一个分开的对象，但是代理到原来的上下文对象为了向下兼容。它有不同的$$typeof，所以我们能够针对上下文做消费者时的错误使用告警
     // A separate object, but proxies back to the original context object for
     // backwards compatibility. It has a different $$typeof, so we can properly
     // warn for the incorrect usage of Context as a Consumer.
     var Consumer = {
+      //  设置类型
       $$typeof: REACT_CONTEXT_TYPE,
+      //  循环引用上下文
       _context: context,
       _calculateChangedBits: context._calculateChangedBits
     };
+    //  Flow抱怨没有设置值，因为这是在内部的
     // $FlowFixMe: Flow complains about not setting a value, which is intentional here
     Object.defineProperties(Consumer, {
+      //  给consumer设置getter和setter
       Provider: {
         get: function () {
+          //  不能调用Consumer.Provider，否则将报警告，该错误只会报一次
           if (!hasWarnedAboutUsingConsumerProvider) {
             hasWarnedAboutUsingConsumerProvider = true;
+            //  启用带调用栈的warning
             warning$1(false, 'Rendering <Context.Consumer.Provider> is not supported and will be removed in ' + 'a future major release. Did you mean to render <Context.Provider> instead?');
           }
+          //  返回Provider
           return context.Provider;
         },
         set: function (_Provider) {
           context.Provider = _Provider;
         }
       },
+      //  获取当前值
       _currentValue: {
         get: function () {
           return context._currentValue;
@@ -1647,6 +1668,7 @@ function createContext(defaultValue, calculateChangedBits) {
       },
       Consumer: {
         get: function () {
+          //  不建议嵌套两层consumer，否则抛warning
           if (!hasWarnedAboutUsingNestedContextConsumers) {
             hasWarnedAboutUsingNestedContextConsumers = true;
             warning$1(false, 'Rendering <Context.Consumer.Consumer> is not supported and will be removed in ' + 'a future major release. Did you mean to render <Context.Consumer> instead?');
@@ -1655,10 +1677,11 @@ function createContext(defaultValue, calculateChangedBits) {
         }
       }
     });
+    //  Flow抱怨丢失了属性因为他没有理解defineProperty
     // $FlowFixMe: Flow complains about missing properties because it doesn't understand defineProperty
     context.Consumer = Consumer;
   }
-
+  //  设置默认渲染器
   {
     context._currentRenderer = null;
     context._currentRenderer2 = null;
@@ -1667,17 +1690,19 @@ function createContext(defaultValue, calculateChangedBits) {
   return context;
 }
 
-//  lazy类
+//  lazy的构造函数
 function lazy(ctor) {
   var lazyType = {
     $$typeof: REACT_LAZY_TYPE,
     _ctor: ctor,
+    //  react使用这些值去储存结果
     // React uses these fields to store the result.
     _status: -1,
     _result: null
   };
 
   {
+    //  在生产环境下，这些都会设置再对象上
     // In production, this would just set it on the object.
     var defaultProps = void 0;
     var propTypes = void 0;
@@ -1688,8 +1713,11 @@ function lazy(ctor) {
           return defaultProps;
         },
         set: function (newDefaultProps) {
+          //  react不支持给lazy加载的组件修改默认属性,要么在定义的时候修改，要么在外面包上一层
           warning$1(false, 'React.lazy(...): It is not supported to assign `defaultProps` to ' + 'a lazy component import. Either specify them where the component ' + 'is defined, or create a wrapping component around it.');
           defaultProps = newDefaultProps;
+          //  和生产环境的行为更接近
+          //  设置可枚举类型
           // Match production behavior more closely:
           Object.defineProperty(lazyType, 'defaultProps', {
             enumerable: true
@@ -1702,6 +1730,7 @@ function lazy(ctor) {
           return propTypes;
         },
         set: function (newPropTypes) {
+          //  react不支持给懒加载组件设置属性类型
           warning$1(false, 'React.lazy(...): It is not supported to assign `propTypes` to ' + 'a lazy component import. Either specify them where the component ' + 'is defined, or create a wrapping component around it.');
           propTypes = newPropTypes;
           // Match production behavior more closely:
@@ -1719,17 +1748,24 @@ function lazy(ctor) {
 //  前向ref
 function forwardRef(render) {
   {
+    //  感觉就是一堆校验
     if (render != null && render.$$typeof === REACT_MEMO_TYPE) {
+      //  如果render不为null且其类型为REACT_MEMO_TYPE，抛错
       warningWithoutStack$1(false, 'forwardRef requires a render function but received a `memo` ' + 'component. Instead of forwardRef(memo(...)), use ' + 'memo(forwardRef(...)).');
     } else if (typeof render !== 'function') {
+      //  如果不是函数，抛错
       warningWithoutStack$1(false, 'forwardRef requires a render function but was given %s.', render === null ? 'null' : typeof render);
     } else {
       !(
+        //  0参数的时候不报错，因为这可能是因为参数是对象
       // Do not warn for 0 arguments because it could be due to usage of the 'arguments' object
+      //  如果参数数组长度不为0或2，抛错：forwardRef只接受2个参数，属性值和ref,'你忘记传ref'或'多出来的参数都会被省略'
       render.length === 0 || render.length === 2) ? warningWithoutStack$1(false, 'forwardRef render functions accept exactly two parameters: props and ref. %s', render.length === 1 ? 'Did you forget to use the ref parameter?' : 'Any additional parameter will be undefined.') : void 0;
     }
 
+    //  如果不满足之前的条件且render不为空
     if (render != null) {
+      //  如果render上存在defaultProps或者propTypes，抛错：forwardRef的渲染函数不支持propTypes或者defaultProps，你实际上传入了一个react组件是吗
       !(render.defaultProps == null && render.propTypes == null) ? warningWithoutStack$1(false, 'forwardRef render functions do not support propTypes or defaultProps. ' + 'Did you accidentally pass a React component?') : void 0;
     }
   }
@@ -1740,17 +1776,22 @@ function forwardRef(render) {
   };
 }
 
-//  类型验证
+//  判断是否是元素的可用类型
 function isValidElementType(type) {
+  //  字符串，函数，react片段
   return typeof type === 'string' || typeof type === 'function' ||
+  //  这里的类型可能是symbol或者是数字，如果使用了降级的写法
   // Note: its typeof might be other than 'symbol' or 'number' if it's a polyfill.
+  //  后面的这些type要调一次$$typeof
   type === REACT_FRAGMENT_TYPE || type === REACT_CONCURRENT_MODE_TYPE || type === REACT_PROFILER_TYPE || type === REACT_STRICT_MODE_TYPE || type === REACT_SUSPENSE_TYPE || typeof type === 'object' && type !== null && (type.$$typeof === REACT_LAZY_TYPE || type.$$typeof === REACT_MEMO_TYPE || type.$$typeof === REACT_PROVIDER_TYPE || type.$$typeof === REACT_CONTEXT_TYPE || type.$$typeof === REACT_FORWARD_REF_TYPE);
 }
 
 //  纯函数版本的pureComponent,第一个参数是个函数
 function memo(type, compare) {
   {
+    //  如果不是react类型
     if (!isValidElementType(type)) {
+      //  memo的第一个参数必须是组件
       warningWithoutStack$1(false, 'memo: The first argument must be a component. Instead ' + 'received: %s', type === null ? 'null' : typeof type);
     }
   }
@@ -1764,31 +1805,42 @@ function memo(type, compare) {
 //  返回当前的dispatcher
 function resolveDispatcher() {
   var dispatcher = ReactCurrentDispatcher.current;
+  //  如果dispatcher是null,报错
+  //  不可用的钩子调用，hooks只能在函数类型的组件内调用，翻身这个报错可能有以下几个原因：
+  //  1react和渲染器（react dom）的版本不匹配，2你没有遵循react的使用规则，3你的app内可能有多个react实例
   !(dispatcher !== null) ? invariant(false, 'Invalid hook call. Hooks can only be called inside of the body of a function component. This could happen for one of the following reasons:\n1. You might have mismatching versions of React and the renderer (such as React DOM)\n2. You might be breaking the Rules of Hooks\n3. You might have more than one copy of React in the same app\nSee https://fb.me/react-invalid-hook-call for tips about how to debug and fix this problem.') : void 0;
   return dispatcher;
 }
 
 //  貌似都是hooks相关api
 function useContext(Context, unstable_observedBits) {
+  //  获得当前的dispatcher
   var dispatcher = resolveDispatcher();
   {
+    //  如果有第二个参数抛警告
+    //  useContext的第二个参数是为未来保留的
     !(unstable_observedBits === undefined) ? warning$1(false, 'useContext() second argument is reserved for future ' + 'use in React. Passing it is not supported. ' + 'You passed: %s.%s', unstable_observedBits, typeof unstable_observedBits === 'number' && Array.isArray(arguments[2]) ? '\n\nDid you call array.map(useContext)? ' + 'Calling Hooks inside a loop is not supported. ' + 'Learn more at https://fb.me/rules-of-hooks' : '') : void 0;
 
     // TODO: add a more generic warning for invalid values.
     if (Context._context !== undefined) {
       var realContext = Context._context;
+      //  不要删除重复数据，因为这个将会合理地触发bug，没有人会在现存的代码中这样用
       // Don't deduplicate because this legitimately causes bugs
       // and nobody should be using this in existing code.
       if (realContext.Consumer === Context) {
+        //  useContext(Context.Consumer)这种写法会抛错
         warning$1(false, 'Calling useContext(Context.Consumer) is not supported, may cause bugs, and will be ' + 'removed in a future major release. Did you mean to call useContext(Context) instead?');
       } else if (realContext.Provider === Context) {
+        //  useContext(Context.Provider)这种写法会抛错
         warning$1(false, 'Calling useContext(Context.Provider) is not supported. ' + 'Did you mean to call useContext(Context) instead?');
       }
     }
   }
+  //  通过dispatcher调用useContext
   return dispatcher.useContext(Context, unstable_observedBits);
 }
 
+//  一堆react hooks API的定义
 function useState(initialState) {
   var dispatcher = resolveDispatcher();
   return dispatcher.useState(initialState);
