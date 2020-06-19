@@ -673,7 +673,7 @@ function setCurrentlyValidatingElement(element) {
   ReactDebugCurrentFrame.getCurrentStack = null;
 
   //  增加枚举的方法
-  //  本质上是返回调用堆栈
+  //  本质上是返回调用堆栈的附录
   ReactDebugCurrentFrame.getStackAddendum = function () {
     var stack = '';
 
@@ -1888,6 +1888,8 @@ function useDebugValue(value, formatterFn) {
   }
 }
 
+//  ReactElementValidator提供一个元素工厂函数的包装器，他可以校验传递给元素的属性。
+//  这只会在开发环境中被调用，在支持严格模式的语言中将会被替换
 /**
  * ReactElementValidator provides a wrapper around a element factory
  * which validates the props passed to the element. This is intended to be
@@ -1895,6 +1897,7 @@ function useDebugValue(value, formatterFn) {
  * that support it.
  */
 
+ // 属性名拼错提醒
 var propTypesMisspellWarningShown = void 0;
 
 {
@@ -1902,7 +1905,9 @@ var propTypesMisspellWarningShown = void 0;
 }
 
 // 一堆报错方法
+//  获取错误的信息
 function getDeclarationErrorAddendum() {
+  //  如果存在ReactCurrentOwner
   if (ReactCurrentOwner.current) {
     var name = getComponentName(ReactCurrentOwner.current.type);
     if (name) {
@@ -1912,35 +1917,47 @@ function getDeclarationErrorAddendum() {
   return '';
 }
 
+//  获取源码的错误信息
 function getSourceInfoErrorAddendum(elementProps) {
+  //  确定元素及其source存在
   if (elementProps !== null && elementProps !== undefined && elementProps.__source !== undefined) {
     var source = elementProps.__source;
+    //  删掉前面的路径
     var fileName = source.fileName.replace(/^.*[\\\/]/, '');
     var lineNumber = source.lineNumber;
+    //  读取行数，拼接信息
     return '\n\nCheck your code at ' + fileName + ':' + lineNumber + '.';
   }
   return '';
 }
 
+//  如果动态子元素数组上没有设置明确的key或者key本身无效就告警。这将方便我们跟踪子元素的更新
 /**
  * Warn if there's no key explicitly set on dynamic arrays of children or
  * object keys are not valid. This allows us to keep track of children between
  * updates.
  */
+
+ // 一个报错信息的映射map
 var ownerHasKeyUseWarning = {};
 
+//  获取当前组件的错误信息
 function getCurrentComponentErrorInfo(parentType) {
   var info = getDeclarationErrorAddendum();
 
   if (!info) {
+    //  如果父元素类型是字符串，直接返回，否则读取displayname或者那么
     var parentName = typeof parentType === 'string' ? parentType : parentType.displayName || parentType.name;
     if (parentName) {
+      //  提醒检查父组件
       info = '\n\nCheck the top-level render call using <' + parentName + '>.';
     }
   }
   return info;
 }
 
+//  如果一个组件没有被指定明确的key则告警。这里的元素是个数组，这个数组可能增加或者减少或者重排
+//  所有没有被验证的元素都需要被指定一个key,错误状态将会被缓存，使得警告只会发生一次
 /**
  * Warn if the element doesn't have an explicit key assigned to it.
  * This element is in an array. The array could grow and shrink or be
@@ -1952,33 +1969,46 @@ function getCurrentComponentErrorInfo(parentType) {
  * @param {ReactElement} element Element that requires a key.
  * @param {*} parentType element's parent's type.
  */
+//  验证是否存在key
 function validateExplicitKey(element, parentType) {
+  //  如果元素上不存在_store，或者元素已经被校验过，或者元素的key存在，直接返回
   if (!element._store || element._store.validated || element.key != null) {
     return;
   }
+  //  标记元素
   element._store.validated = true;
 
+  //  获取错误信息
   var currentComponentErrorInfo = getCurrentComponentErrorInfo(parentType);
   if (ownerHasKeyUseWarning[currentComponentErrorInfo]) {
     return;
   }
+  //  标记一下，避免重复抛错
   ownerHasKeyUseWarning[currentComponentErrorInfo] = true;
 
+  //  通常情况下当前的元素时肇事者，但是如果它接受了子元素作为属性，那么它将成为一个需要制定key的元素的创建者
   // Usually the current owner is the offender, but if it accepts children as a
   // property, it may be the creator of the child that's responsible for
   // assigning it a key.
   var childOwner = '';
   if (element && element._owner && element._owner !== ReactCurrentOwner.current) {
+    //  返回创建这个元素的父元素的信息
     // Give the component that originally created this child.
     childOwner = ' It was passed a child from ' + getComponentName(element._owner.type) + '.';
   }
 
+  //  设置当前正在校验的元素，以便追踪堆栈
   setCurrentlyValidatingElement(element);
   {
+    //  抛出带调用堆栈信息的错
+    //  list中的每个子元素都需要有一个不同的key属性
     warning$1(false, 'Each child in a list should have a unique "key" prop.' + '%s%s See https://fb.me/react-warning-keys for more information.', currentComponentErrorInfo, childOwner);
   }
+  //  将当前元素置为null
   setCurrentlyValidatingElement(null);
 }
+
+//  确保每个元素都被透传到一个静态位置（指的是每个元素都有被指定一个key），或者在一个存在可用key的对象字面量中
 
 /**
  * Ensure that every element either is passed in a static location, in an
@@ -1989,12 +2019,14 @@ function validateExplicitKey(element, parentType) {
  * @param {ReactNode} node Statically passed child of any type.
  * @param {*} parentType node's parent's type.
  */
+//  验证子元素的key
 function validateChildKeys(node, parentType) {
   if (typeof node !== 'object') {
     return;
   }
   //  针对迭代器，数组和单个的情况来确认键
   if (Array.isArray(node)) {
+    //  分别验证数组的每个元素
     for (var i = 0; i < node.length; i++) {
       var child = node[i];
       if (isValidElement(child)) {
@@ -2002,18 +2034,22 @@ function validateChildKeys(node, parentType) {
       }
     }
   } else if (isValidElement(node)) {
+    // 入过是单个react节点，直接标志位通过
     // This element was passed in a valid location.
     if (node._store) {
       node._store.validated = true;
     }
   } else if (node) {
+    //  获取迭代器函数
     var iteratorFn = getIteratorFn(node);
     if (typeof iteratorFn === 'function') {
+      //  入口迭代器过去提供隐式的key,现在我们将为他们输出警告
       // Entry iterators used to provide implicit keys,
       // but now we print a separate warning for them later.
       if (iteratorFn !== node.entries) {
         var iterator = iteratorFn.call(node);
         var step = void 0;
+        //  while循环不停跑迭代器，并验证key
         while (!(step = iterator.next()).done) {
           if (isValidElement(step.value)) {
             validateExplicitKey(step.value, parentType);
@@ -2024,6 +2060,7 @@ function validateChildKeys(node, parentType) {
   }
 }
 
+//  给定一个函数，验证它的参数是否遵循属性类型的定义
 /**
  * Given an element, validate that its props follow the propTypes definition,
  * provided by the type.
@@ -2034,19 +2071,25 @@ function validateChildKeys(node, parentType) {
  // 验证类型
 function validatePropTypes(element) {
   var type = element.type;
+  //  入过元素类型不存在或者是字符串，直接返回
   if (type === null || type === undefined || typeof type === 'string') {
     return;
   }
   var name = getComponentName(type);
   var propTypes = void 0;
+  //  如果type是工厂函数，读取其propTypes
   if (typeof type === 'function') {
     propTypes = type.propTypes;
+
+    //  如果是forward_ref或者memo类型
   } else if (typeof type === 'object' && (type.$$typeof === REACT_FORWARD_REF_TYPE ||
   // Note: Memo only checks outer props here.
   // Inner props are checked in the reconciler.
+  //  Memo只校验外层属性，内部的属性交给协调器处理
   type.$$typeof === REACT_MEMO_TYPE)) {
     propTypes = type.propTypes;
   } else {
+    //  以上二者都不是，直接返回
     return;
   }
   if (propTypes) {
