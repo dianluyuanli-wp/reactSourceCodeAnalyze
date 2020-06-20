@@ -83,7 +83,7 @@ function getIteratorFn(maybeIterable) {
 var validateFormat = function () {};
 
 {
-  //  没有格式的话抛错
+  //  处理错误信息需要格式，没有格式的话抛错，格式可以李继伟一个字符串模板
   validateFormat = function (format) {
     if (format === undefined) {
       throw new Error('invariant requires an error message argument');
@@ -97,7 +97,8 @@ function invariant(condition, format, a, b, c, d, e, f) {
   if (!condition) {
     var error = void 0;
     if (format === undefined) {
-      //  抛出非格式化的错误
+      //  如果没有格式，抛出非格式化的错误
+      //  压缩后的代码有抛错发生，请使用非压缩的开发模式，以便获取完整的报错信息
       error = new Error('Minified exception occurred; use the non-minified dev environment ' + 'for the full error message and additional helpful warnings.');
     } else {
       var args = [a, b, c, d, e, f];
@@ -110,7 +111,7 @@ function invariant(condition, format, a, b, c, d, e, f) {
       //  报错的名字是不变性的破坏
       error.name = 'Invariant Violation';
     }
-
+    //  我们并不care 报错函数本身的调用栈，位置置为1，frame这里可以理解为调用栈中的某一帧
     error.framesToPop = 1; // we don't care about invariant's own frame
     throw error;
   }
@@ -137,7 +138,7 @@ function invariant(condition, format, a, b, c, d, e, f) {
  // 低优先级的告警
 var lowPriorityWarning = function () {};
 
-//  这个括号为了封闭上下文，保持干净的命名空间
+//  这个括号为了封闭上下文，保持干净的命名空间?(哪位高人可以解答下，请留言)
 //  大括号里面可以避免被覆盖？
 {
   var printWarning = function (format) {
@@ -226,6 +227,7 @@ var warningWithoutStack = function () {};
       //  不直接调用call,因为在ie9下会报错
       //  手动抛出warning
       //  console方法会自动替换%s, 使用添加的后续参数
+      //  这个用法看不懂的，看看这篇https://www.cnblogs.com/web-record/p/10477778.html
       Function.prototype.apply.call(console.error, console, argsWithFormat);
     }
     try {
@@ -264,6 +266,8 @@ function warnNoop(publicInstance, callerName) {
       return;
     }
     //  调用抛出错误的方法，同时登记，避免二次触发
+    //  不能在一个未挂载的组件上调用某个方法，这个是无意义的操作,
+    //  但是这会触发你应用中的bug,为此你可以在组件中直接指向this.state或者定义state对象,在某个组件中带有所需状态的类属性。
     warningWithoutStack$1(false, "Can't call %s on a component that is not yet mounted. " + 'This is a no-op, but it might indicate a bug in your application. ' + 'Instead, assign to `this.state` directly or define a `state = {};` ' + 'class property with the desired state in the %s component.', callerName, componentName);
     didWarnStateUpdateForUnmountedComponent[warningKey] = true;
   }
@@ -329,7 +333,7 @@ var ReactNoopUpdateQueue = {
     warnNoop(publicInstance, 'replaceState');
   },
 
-  //  设置状态的子集，这个提供merge策略，不支持深度复制，下一阶段：暴露pendingState或者在合并阶段不实用
+  //  设置状态的子集，这个提供merge策略，不支持深度复制，下一阶段：暴露pendingState或者在合并阶段不使用
   /**
    * Sets a subset of the state. This only exists because _pendingState is
    * internal. This provides a merging strategy that is not available to deep
@@ -1806,7 +1810,7 @@ function memo(type, compare) {
 function resolveDispatcher() {
   var dispatcher = ReactCurrentDispatcher.current;
   //  如果dispatcher是null,报错
-  //  不可用的钩子调用，hooks只能在函数类型的组件内调用，翻身这个报错可能有以下几个原因：
+  //  不可用的钩子调用，hooks只能在函数类型的组件内调用，发生这个报错可能有以下几个原因：
   //  1react和渲染器（react dom）的版本不匹配，2你没有遵循react的使用规则，3你的app内可能有多个react实例
   !(dispatcher !== null) ? invariant(false, 'Invalid hook call. Hooks can only be called inside of the body of a function component. This could happen for one of the following reasons:\n1. You might have mismatching versions of React and the renderer (such as React DOM)\n2. You might be breaking the Rules of Hooks\n3. You might have more than one copy of React in the same app\nSee https://fb.me/react-invalid-hook-call for tips about how to debug and fix this problem.') : void 0;
   return dispatcher;
