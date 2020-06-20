@@ -2093,18 +2093,26 @@ function validatePropTypes(element) {
     return;
   }
   if (propTypes) {
+    //  设置当前正在校验的元素
     setCurrentlyValidatingElement(element);
+    //  这里调用的是公共包内容
     checkPropTypes(propTypes, element.props, 'prop', name, ReactDebugCurrentFrame.getStackAddendum);
     setCurrentlyValidatingElement(null);
   } else if (type.PropTypes !== undefined && !propTypesMisspellWarningShown) {
+    //  如果type.ProTypes是有值的，并且拼写错误标志位为false
     propTypesMisspellWarningShown = true;
+    //  组件使用propTypes而不是PropTypes，你是不是拼错了
     warningWithoutStack$1(false, 'Component %s declared `PropTypes` instead of `propTypes`. Did you misspell the property assignment?', name || 'Unknown');
   }
   if (typeof type.getDefaultProps === 'function') {
+    //  如果type上的getDefaultProps是个函数
+    //  除非是支持react class组件的，否则抛警告
+    //  getDefaultProps仅在经典的React.createClass定义中使用，请使用静态属性defaultProps来替代
     !type.getDefaultProps.isReactClassApproved ? warningWithoutStack$1(false, 'getDefaultProps is only used on classic React.createClass ' + 'definitions. Use a static property named `defaultProps` instead.') : void 0;
   }
 }
 
+//  提供一个碎片，验证其只被赋予了碎片支持的属性
 /**
  * Given a fragment, validate that it can only be provided with fragment props
  * @param {ReactElement} fragment
@@ -2112,21 +2120,24 @@ function validatePropTypes(element) {
 
  // 检查块的参数，只支持key和children
 function validateFragmentProps(fragment) {
+  //  设置当前正在校验的元素
   setCurrentlyValidatingElement(fragment);
 
   var keys = Object.keys(fragment.props);
   for (var i = 0; i < keys.length; i++) {
     var key = keys[i];
     if (key !== 'children' && key !== 'key') {
+      //  如果有非children和key的参数，抛错
       warning$1(false, 'Invalid prop `%s` supplied to `React.Fragment`. ' + 'React.Fragment can only have `key` and `children` props.', key);
       break;
     }
   }
 
   if (fragment.ref !== null) {
+    //  fragment不支持ref
     warning$1(false, 'Invalid attribute `ref` supplied to `React.Fragment`.');
   }
-
+  //  还原
   setCurrentlyValidatingElement(null);
 }
 
@@ -2135,20 +2146,25 @@ function createElementWithValidation(type, props, children) {
   //  这个是一个返回的bool值
   var validType = isValidElementType(type);
 
+  //  在这里我们仅仅警告并不抛错，我们假设元素的创建是成功的，在渲染阶段会有报错
   // We warn in this case but don't throw. We expect the element creation to
   // succeed and there will likely be errors in render.
 
   //  如果没有type的话启动报错
   if (!validType) {
     var info = '';
+    //  如果type未定义或者type是一个空对象
     if (type === undefined || typeof type === 'object' && type !== null && Object.keys(type).length === 0) {
+      //  你可能忘记导出你的组件，或者搞混了默认的导出模式与具名导出的方式
       info += ' You likely forgot to export your component from the file ' + "it's defined in, or you might have mixed up default and named imports.";
     }
-
+    //  获取源码信息，包括文件名和代码行数
     var sourceInfo = getSourceInfoErrorAddendum(props);
+    //  如果存在就拼接源码信息
     if (sourceInfo) {
       info += sourceInfo;
     } else {
+      //  获取声明报错的信息
       info += getDeclarationErrorAddendum();
     }
 
@@ -2158,35 +2174,45 @@ function createElementWithValidation(type, props, children) {
     } else if (Array.isArray(type)) {
       typeString = 'array';
     } else if (type !== undefined && type.$$typeof === REACT_ELEMENT_TYPE) {
+      //  如果type是一个react元素，修改信息
       typeString = '<' + (getComponentName(type.type) || 'Unknown') + ' />';
+      //  你是否错误地导出了一个JSX字面量而不是一个react组件
       info = ' Did you accidentally export a JSX literal instead of a component?';
     } else {
       typeString = typeof type;
     }
-
+    //  告警 type不可用, 期望一个字符串（最为嵌入式组件）或者一个类/函数（作为合成组件）,但是得到了 xxx
     warning$1(false, 'React.createElement: type is invalid -- expected a string (for ' + 'built-in components) or a class/function (for composite ' + 'components) but got: %s.%s', typeString, info);
   }
 
   //  构建元素
   var element = createElement.apply(this, arguments);
 
+  //  这个结果有可能是null,如果是mock的或者入参里有自定义函数
   // The result can be nullish if a mock or a custom function is used.
+
+  //  todo: 将会丢掉这部分逻辑，当不在允许null作为参数时
   // TODO: Drop this when these are no longer allowed as the type argument.
   if (element == null) {
     return element;
   }
 
+  // 当type不可用的时候跳过key的告警，因为我们的key检验逻辑并不期望会获得非字符串/函数 类型，这样会抛出令人疑惑地错误
+  //  我们期望不一样的行为以便区别开发和生产环境（渲染过程将会抛出有益的信息只要类型是固定的，此时类型的警告也会出现）
   // Skip key warning if the type isn't valid since our key validation logic
   // doesn't expect a non-string/function type and can throw confusing errors.
   // We don't want exception behavior to differ between dev and prod.
   // (Rendering will throw with a helpful message and as soon as the type is
   // fixed, the key warnings will appear.)
+  
+  //  如果类型校验通过，再校验key  
   if (validType) {
     for (var i = 2; i < arguments.length; i++) {
       validateChildKeys(arguments[i], type);
     }
   }
 
+  //  如果是fragment类型，跑对应的校验，反之跑通用的类型校验
   if (type === REACT_FRAGMENT_TYPE) {
     validateFragmentProps(element);
   } else {
@@ -2196,16 +2222,20 @@ function createElementWithValidation(type, props, children) {
   return element;
 }
 
-//  返回元素
+//  创建带校验的工厂函数
 function createFactoryWithValidation(type) {
+  //  带验证的工厂函数
   var validatedFactory = createElementWithValidation.bind(null, type);
   validatedFactory.type = type;
   // Legacy hook: remove it
+  //  历史代码，将会移除
   {
     Object.defineProperty(validatedFactory, 'type', {
       enumerable: false,
       get: function () {
+        //  Factory.type这个api将会被移除，直接在类上获取，在透传到createFactory之前
         lowPriorityWarning$1(false, 'Factory.type is deprecated. Access the class directly ' + 'before passing it to createFactory.');
+        //  兼容性，还是给type一个定义
         Object.defineProperty(this, 'type', {
           value: type
         });
@@ -2220,15 +2250,21 @@ function createFactoryWithValidation(type) {
 //  克隆元素并检查children的属性
 function cloneElementWithValidation(element, props, children) {
   var newElement = cloneElement.apply(this, arguments);
+  //  校验key
   for (var i = 2; i < arguments.length; i++) {
     validateChildKeys(arguments[i], newElement.type);
   }
+  //  校验属性
   validatePropTypes(newElement);
   return newElement;
 }
 
+//  帮助识别在生命周期初始阶段hook和setState的副作用
 // Helps identify side effects in begin-phase lifecycle hooks and setState reducers:
 
+//  在某些情况下，严格模式也会有两次渲染的生命周期
+//  这在测试环节中将会导致困扰，也会在生产环境中带来性能损耗
+//  这个特性标志被用来控制这种行为：
 
 // In some cases, StrictMode should also double-render lifecycles.
 // This can be confusing for tests though,
@@ -2236,19 +2272,20 @@ function cloneElementWithValidation(element, props, children) {
 // This feature flag can be used to control the behavior:
 
 
+//  为了保留'暂停并且抛错'这种在debugger中的特性，我们重放了渲染失败组件初始阶段内部的invokeGuardedCallback
 // To preserve the "Pause on caught exceptions" behavior of the debugger, we
 // replay the begin phase of a failed component inside invokeGuardedCallback.
 
-
+//  对被遗弃的api（async-unsafe生命周期）警告，详见RFC #6
 // Warn about deprecated, async-unsafe lifecycles; relates to RFC #6:
 
-
+//  收集先进的时间指标，为了分析子树中的呈现
 // Gather advanced timing metrics for Profiler subtrees.
 
-
+//  跟踪触发每个提交的交互
 // Trace which interactions trigger each commit.
 
-
+//  只能在web环境下使用
 // Only used in www builds.
  // TODO: true? Here it might just be false.
 
@@ -2258,16 +2295,21 @@ function cloneElementWithValidation(element, props, children) {
 // Only used in www builds.
 
 
+//  React Fire: 避免value和checked属性与其相关的DOM元素同步
 // React Fire: prevent the value and checked attributes from syncing
 // with their related DOM properties
 
+//  这些api在即将到来16.7版本中将不在是不稳定的（这个是以前的注释没改吧？）
+//  通过一个标志位来控制，以便支持16.6以下的版本
 
 // These APIs will no longer be "unstable" in the upcoming 16.7 release,
 // Control this behavior with a flag to support 16.6 minor releases in the meanwhile.
 var enableStableConcurrentModeAPIs = false;
 
 //  各种会用到的api封装到一个对象里
+//  react暴露出来的api大集合
 var React = {
+  //  childeren相关api
   Children: {
     map: mapChildren,
     forEach: forEachChildren,
@@ -2285,6 +2327,7 @@ var React = {
   lazy: lazy,
   memo: memo,
 
+  //  hooks相关的api
   useCallback: useCallback,
   useContext: useContext,
   useEffect: useEffect,
@@ -2300,6 +2343,7 @@ var React = {
   StrictMode: REACT_STRICT_MODE_TYPE,
   Suspense: REACT_SUSPENSE_TYPE,
 
+  //  元素相关的api
   createElement: createElementWithValidation,
   cloneElement: cloneElementWithValidation,
   createFactory: createFactoryWithValidation,
@@ -2310,8 +2354,13 @@ var React = {
   unstable_ConcurrentMode: REACT_CONCURRENT_MODE_TYPE,
   unstable_Profiler: REACT_PROFILER_TYPE,
 
+  //  秘密的内部属性，不要使用否则你会被开除
   __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: ReactSharedInternals
 };
+
+//  部分api是通过特性标志位来添加的
+//  确保开源代码的稳定版本不会改变react对象来避免deopts
+//  在稳定版本中也不应该暴露他们的名字
 
 // Note: some APIs are added with feature flags.
 // Make sure that stable builds for open source
@@ -2326,15 +2375,18 @@ if (enableStableConcurrentModeAPIs) {
 }
 
 
-
+//  React的不可变副本
 var React$2 = Object.freeze({
 	default: React
 });
 
+//  优先获取React
 var React$3 = ( React$2 && React ) || React$2;
 
 // TODO: decide on the top-level export form.
 // This is hacky but makes it work with both Rollup and Jest.
+
+//  这个有点hack，但是支持Rollup和Jest
 var react = React$3.default || React$3;
 
 module.exports = react;
