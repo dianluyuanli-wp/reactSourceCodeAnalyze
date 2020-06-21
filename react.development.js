@@ -361,7 +361,7 @@ var emptyObject = {};
 /**
  * Base class helpers for the updating state of a component.
  */
-//  更新组件状态的基类,组件的基类
+//  组件的构造函数
 function Component(props, context, updater) {
   this.props = props;
   this.context = context;
@@ -481,6 +481,7 @@ function PureComponent(props, context, updater) {
   this.updater = updater || ReactNoopUpdateQueue;
 }
 
+//  关于原型和构造函数的相关内容可以参考https://blog.csdn.net/cc18868876837/article/details/81211729
 //  纯粹的组件原型
 var pureComponentPrototype = PureComponent.prototype = new ComponentDummy();
 //  定义纯粹组件原型的构造函数
@@ -577,13 +578,13 @@ var describeComponentFrame = function (name, source, ownerName) {
 
 var Resolved = 1;
 
-//  使已经resolved的懒组价更加优雅
+//  细化解析惰性组件
 function refineResolvedLazyComponent(lazyComponent) {
   //  如果已经resolved,返回结果
   return lazyComponent._status === Resolved ? lazyComponent._result : null;
 }
 
-//  获取包裹的名字
+//  获取外层组件的名字
 function getWrappedName(outerType, innerType, wrapperName) {
   var functionName = innerType.displayName || innerType.name || '';
   //  优先是outerType的displayName,否则是wrapperName和functionName的组合
@@ -600,6 +601,7 @@ function getComponentName(type) {
   {
     //  如果type的tag是数字
     if (typeof type.tag === 'number') {
+      //  告警：接收到了预料之外的对象，这可能是react内部的bug，请提issue
       warningWithoutStack$1(false, 'Received an unexpected object in getComponentName(). ' + 'This is likely a bug in React. Please file an issue.');
     }
   }
@@ -658,7 +660,7 @@ function getComponentName(type) {
   return null;
 }
 
-//  react正在debug的frame
+//  react正在debug的frame，可以理解为一个对象里面有一些方法可供调取当前组件的调用栈
 var ReactDebugCurrentFrame = {};
 
 //  当前正在验证的元素
@@ -704,7 +706,7 @@ function setCurrentlyValidatingElement(element) {
   };
 }
 
-//  react分享的内部构件
+//  react内部共享的控制构件
 var ReactSharedInternals = {
   //  当前的分发者
   ReactCurrentDispatcher: ReactCurrentDispatcher,
@@ -815,6 +817,7 @@ function defineKeyPropWarningGetter(props, displayName) {
     if (!specialPropKeyWarningShown) {
       specialPropKeyWarningShown = true;
       //  key不能作为参数获取，被react内部征用了
+      //  key不能作为参数，尝试去获取它只会返回undefined，如果你想获取子组件上的这个值，你应该传另一个名字的属性
       warningWithoutStack$1(false, '%s: `key` is not a prop. Trying to access it will result ' + 'in `undefined` being returned. If you need to access the same ' + 'value within the child component, you should pass it as a different ' + 'prop. (https://fb.me/react-special-props)', displayName);
     }
   };
@@ -843,7 +846,7 @@ function defineRefPropWarningGetter(props, displayName) {
   });
 }
 
-//  定义一个创建react 元素的工厂函数，这跟class模式的组建不一样，请不要使用new来调用，所有instanceof来检查是失效的，不要使用要用Symbol.for('react.element')，而要用$$typeof来检查，
+//  定义一个创建react 元素的构造函数，这跟class模式的组建不一样，请不要使用new来调用，所有instanceof来检查是失效的，不要使用要用Symbol.for('react.element')，而要用$$typeof来检查，
 //  来判断是否是react组件
 
 //  sele是一个暂时的变量，是用来判断当React.createElement被调用的时候this和owner是否一致，以便我们告警。我们打算摆脱owner这个概念并且
