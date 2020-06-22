@@ -18,9 +18,12 @@ if (process.env.NODE_ENV !== "production") {
 var React = require('react');
 var _assign = require('object-assign');
 var checkPropTypes = require('prop-types/checkPropTypes');
+//  一个浏览器环境下任务调度的库
 var scheduler = require('scheduler');
 var tracing = require('scheduler/tracing');
 
+//  使用invariant来判断入参的不变性
+//  使用类似sprintf的格式来处理入参，相关信息会被移除，但是函数本身在生产环境会被保留
 /**
  * Use invariant() to assert state which your program assumes to be true.
  *
@@ -42,34 +45,42 @@ var validateFormat = function () {};
   };
 }
 
-//  报错方法
+//  报错方法，跟react中的完全一样
 function invariant(condition, format, a, b, c, d, e, f) {
   validateFormat(format);
 
   if (!condition) {
     var error = void 0;
     if (format === undefined) {
+      //  如果没有格式，抛出非格式化的错误
+      //  压缩后的代码有抛错发生，请使用非压缩的开发模式，以便获取完整的报错信息
       error = new Error('Minified exception occurred; use the non-minified dev environment ' + 'for the full error message and additional helpful warnings.');
     } else {
       var args = [a, b, c, d, e, f];
       var argIndex = 0;
+      //  replace方法会对每一个匹配项返回回调函数的返回值
+      //  生成错误提示
       error = new Error(format.replace(/%s/g, function () {
         return args[argIndex++];
       }));
+      //  报错的名字是不变性的破坏
       error.name = 'Invariant Violation';
     }
-
+    //  我们并不care 报错函数本身的调用栈，位置置为1，frame这里可以理解为调用栈中的某一帧
     error.framesToPop = 1; // we don't care about invariant's own frame
     throw error;
   }
 }
 
+//  依靠对invariant的实现，我们可以保持格式和参数在web的构建中
 // Relying on the `invariant()` implementation lets us
 // preserve the format and params in the www builds.
 
+//  判断React是否存在，如果不存在报错
+//  ReactDOM先于react加载，请确保你在加载ReactDOM包之前加载了React包
 !React ? invariant(false, 'ReactDOM was loaded before React. Make sure you load the React package before loading ReactDOM.') : void 0;
 
-//  唤起受保护回调的接口实现 看样子所有的函数都用这个东西包过，impl就是函数接口的抽象实现
+//  唤起受保护回调的接口实现 看样子所有的函数都用这个东西包过，impl就是函数接口的抽象实现，使用try catch捕获错误
 var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f) {
   //  从第四个参数开始
   var funcArgs = Array.prototype.slice.call(arguments, 3);
@@ -83,6 +94,19 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
 
 {
   //  关于报错的处理
+
+  //  在开发模式下，我们将在某些版本下替换invokeGuardedCallback，以便有更好的浏览器开发工具体验，
+  //  这是为了保留'暂停并且抛出异常'的特性。因为react用invokeGuardedCallback封装了所有用户提供的
+  //  函数，生产环境的invokeGuardedCallback使用了try catch,所有用户的异常将会像原生的异常捕获
+  //  那样被处理，开发者工具将不会暂停代码执行除非开发者使用了额外的手段来保证代码暂停并捕获异常。这
+  //  是反直觉的，因为尽管react捕获到了错误，但是从开发者的视角来看，错误并没有被捕获
+
+  //  为了保留期望的`暂停并且抛错`的特性，我们在开发环境中并没有使用try catch,反之，我们同步地对
+  //  虚拟DOM发送了一个虚拟的事件，然后在伪造的事件处理器中调用了用户提供的回调函数，如果回调被抛出
+  //  错，这个错误将会被全局的事件处理器捕获。但是因为错误的发生在一个不同的时间循环上下文中，
+  //  这不会打断通常的程序流。事实上，这给我们提供了try-catch的体验但实际上并没有真的使用try-catch
+  //  非常的巧妙（官方挺得意的）
+
   // In DEV mode, we swap out invokeGuardedCallback for a special version
   // that plays more nicely with the browser's DevTools. The idea is to preserve
   // "Pause on exceptions" behavior. Because React wraps all user-provided
@@ -102,19 +126,37 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
   // Effectively, this gives us try-catch behavior without actually using
   // try-catch. Neat!
 
+  //  判断浏览器是否支持我们需要实现的api,以便我们能够实现在开发环境下特殊功能的invokeGuardedCallback
+
   // Check that the browser supports the APIs we need to implement our special
   // DEV version of invokeGuardedCallback
+
+  //  确保是浏览器环境且支持document.createEvent api
   if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof document !== 'undefined' && typeof document.createEvent === 'function') {
     //  创建一个假节点
     var fakeNode = document.createElement('react');
 
+    //  定义开发环境下的invokeGuardedCallback
     var invokeGuardedCallbackDev = function (name, func, context, a, b, c, d, e, f) {
+      //  如果document不存在,我们调用的createEvent方法的时候肯定会报错。这样会产生令人
+      //  困惑的问题（详情链接：https://github.com/facebookincubator/create-react-app/issues/3482）
+      //  所以我们先发制人，跑出一个更友好的报错信息
+
       // If document doesn't exist we know for sure we will crash in this method
       // when we call document.createEvent(). However this can cause confusing
       // errors: https://github.com/facebookincubator/create-react-app/issues/3482
       // So we preemptively throw with a better message instead.
+
+      //  document在react初始化的时候是定义了的，但是现在不在有定义.这有可能发生在测试环境中当
+      //  某个组件在一个异步回调中发生了更新，但此时测试已经结束了，为了解决这个问题，你可以在
+      //  测试完成时卸载组件（确保所有的异步操作在componentWillUnmoent已经取消），或者让测试过程
+      //  本身变成异步的
       !(typeof document !== 'undefined') ? invariant(false, 'The `document` global was defined when React was initialized, but is not defined anymore. This can happen in a test environment if a component schedules an update from an asynchronous callback, but the test has already finished running. To solve this, you can either unmount the component at the end of your test (and ensure that any asynchronous operations get canceled in `componentWillUnmount`), or you can change the test itself to be asynchronous.') : void 0;
       var evt = document.createEvent('Event');
+
+      //  追踪用户提供的回调是否抛出错误。在一开始我们把它置为true,在调用回调之后我们
+      //  马上将他置为false.如果这个函数报错了，didError永远不会被置为false。这个策略在浏览器
+      //  比较low或者调用全局错误处理函数失败时依然生效，因为他本身并不依赖error事件
 
       // Keeps track of whether the user-provided callback threw an error. We
       // set this to true at the beginning, then set it to false right after
@@ -128,24 +170,38 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
       // Keeps track of the value of window.event so that we can reset it
       // during the callback to let user code access window.event in the
       // browsers that support it.
+
+      //  跟踪window.event的值，方便我们在回调过程中重置，使得用户代码能够在支持的浏览器中获取到这个方法
+
       //  window的event事件
       var windowEvent = window.event;
+
+      //  获取window.event的事件描述符
 
       // Keeps track of the descriptor of window.event to restore it after event
       // dispatching: https://github.com/facebook/react/issues/13688
       //  获取属性描述符
       var windowEventDescriptor = Object.getOwnPropertyDescriptor(window, 'event');
 
+      //  为我们伪造的事件创建一个事件句柄。我们将会通过dispatchEvent同步地触发我们的伪造事件
+      //  在这个句柄中，我们将会调用用户提供的回调
+
       // Create an event handler for our fake event. We will synchronously
       // dispatch our fake event using `dispatchEvent`. Inside the handler, we
       // call the user-provided callback.
       var funcArgs = Array.prototype.slice.call(arguments, 3);
       function callCallback() {
+        //  我们立即移除事件监听器上的回调，使得内嵌的invokeGuardedCallback并不会冲突
+        //  否则的话，内嵌的调用将会触发上层堆栈中的伪造事件的handler
+
         // We immediately remove the callback from event listeners so that
         // nested `invokeGuardedCallback` calls do not clash. Otherwise, a
         // nested call would trigger the fake event handlers of any call higher
         // in the stack.
         fakeNode.removeEventListener(evtType, callCallback, false);
+
+        //  我们检查event是否是window的自有属性，避免在IE小于等于10的浏览器中在
+        //  严格模式下报错，在firefox浏览器中并不支持window.event
 
         // We check for window.hasOwnProperty('event') to prevent the
         // window.event assignment in both IE <= 10 as they throw an error
@@ -155,10 +211,19 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
           window.event = windowEvent;
         }
 
+        //  调用用户传入的函数，绑定上下文
         func.apply(context, funcArgs);
         //  调用了用户的错误回调后置状态
         didError = false;
       }
+
+      //  创建一个全局的error处理程序。我们用它来捕获抛出的所有值。这个error处理程序
+      //  很有可能触发不止一次，例如，如果非react节点也调用了dispatchEvent,并且用了一个
+      //  事件句柄来抛出事件。我们应该兼容绝大多数上述情况。即便我们的error处理程序
+      //  触发了多次，最有一个error事件总是被使用的。如果回调事实上抛错了，我们知道
+      //  最后一个错误事件是真正的那个报错，因为不会有其他的错误发生在我们回调报错和
+      //  dispatchEvent调用的代码之间。如果回调没有报错，但是error事件依然被触发，
+      //  我们知道可以忽略它，因为didError是false，正如上面解释的那样。
 
       // Create a global error event handler. We use this to capture the value
       // that was thrown. It's possible that this error handler will fire more

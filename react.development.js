@@ -83,7 +83,7 @@ function getIteratorFn(maybeIterable) {
 var validateFormat = function () {};
 
 {
-  //  处理错误信息需要格式，没有格式的话抛错，格式可以李继伟一个字符串模板
+  //  处理错误信息需要格式，没有格式的话抛错，格式可以理解为一个字符串模板
   validateFormat = function (format) {
     if (format === undefined) {
       throw new Error('invariant requires an error message argument');
@@ -121,6 +121,10 @@ function invariant(condition, format, a, b, c, d, e, f) {
 // Relying on the `invariant()` implementation lets us
 // preserve the format and params in the www builds.
 
+//  这里的warning实现是从fbjs/warning forked来的
+//  唯一的不同时我们使用console.warn而不是console.error,当没有原生console实现是我们啥也不做，这就是简化后的代码
+//  这个和invariant十分类似，唯一的不同是在条件不满足时我们将打印warning
+//  这个可以在开发环境中打印报错的绝对路径。在生产环境下移除log代码将会保持同样的逻辑并且维持同样的代码路径
 /**
  * Forked from fbjs/warning:
  * https://github.com/facebook/fbjs/blob/e66ba20ad5be433eb54423f2b097d829324d9de6/packages/fbjs/src/__forks__/warning.js
