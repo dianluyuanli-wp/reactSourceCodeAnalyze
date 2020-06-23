@@ -300,6 +300,7 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
   }
 }
 
+//
 var invokeGuardedCallbackImpl$1 = invokeGuardedCallbackImpl;
 
 // Used by Fiber to simulate a try-catch.
