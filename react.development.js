@@ -853,7 +853,7 @@ function defineRefPropWarningGetter(props, displayName) {
 //  定义一个创建react 元素的构造函数，这跟class模式的组建不一样，请不要使用new来调用，所有instanceof来检查是失效的，不要使用要用Symbol.for('react.element')，而要用$$typeof来检查，
 //  来判断是否是react组件
 
-//  sele是一个暂时的变量，是用来判断当React.createElement被调用的时候this和owner是否一致，以便我们告警。我们打算摆脱owner这个概念并且
+//  self是一个暂时的变量，是用来判断当React.createElement被调用的时候this和owner是否一致，以便我们告警。我们打算摆脱owner这个概念并且
 //  使用箭头函数，只要这个二者一致，组件就没有变化
 //  source是一个注释对象（被转译器或者其他文件名，行数，等信息所添加）
 /**
@@ -877,7 +877,7 @@ function defineRefPropWarningGetter(props, displayName) {
  * @internal
  */
 
- // react元素工厂函数，或者叫原型
+ // react元素构造函数
  // 返回的其实是element对象
 var ReactElement = function (type, key, ref, self, source, owner, props) {
   var element = {
@@ -907,7 +907,7 @@ var ReactElement = function (type, key, ref, self, source, owner, props) {
     // commonly used development environments.
     element._store = {};
 
-    // 为了更加方便地进行测试，我们设置了一个不可隐藏的验证标志位，以便测试框架忽略它
+    // 为了更加方便地进行测试，我们设置了一个不可枚举的验证标志位，以便测试框架忽略它
     // To make comparing ReactElements easier for testing purposes, we make
     // the validation flag non-enumerable (where possible, which should
     // include every environment we run tests in), so the test framework
@@ -949,7 +949,7 @@ var ReactElement = function (type, key, ref, self, source, owner, props) {
   return element;
 };
 
-//  返回并创建指定类型的reactElement
+//  创建并返回指定类型的reactElement
 /**
  * Create and return a new ReactElement of the given type.
  * See https://reactjs.org/docs/react-api.html#createelement

@@ -92,18 +92,22 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
   }
 };
 
+//  这里补充下笔者的理解： 生产环境下用try catch,尽量不使应用宕机
+//  开发环境下想要遇到异常时抛错但是不中断应用，这里通过自定义全局
+//  的onError事件，通过监听error事件，利用不同的事件循环保证捕获
+//  错误又不中断程序执行
 {
   //  关于报错的处理
 
   //  在开发模式下，我们将在某些版本下替换invokeGuardedCallback，以便有更好的浏览器开发工具体验，
-  //  这是为了保留'暂停并且抛出异常'的特性。因为react用invokeGuardedCallback封装了所有用户提供的
+  //  这是为了保留'异常时暂停'的特性。因为react用invokeGuardedCallback封装了所有用户提供的
   //  函数，生产环境的invokeGuardedCallback使用了try catch,所有用户的异常将会像原生的异常捕获
   //  那样被处理，开发者工具将不会暂停代码执行除非开发者使用了额外的手段来保证代码暂停并捕获异常。这
   //  是反直觉的，因为尽管react捕获到了错误，但是从开发者的视角来看，错误并没有被捕获
 
   //  为了保留期望的`暂停并且抛错`的特性，我们在开发环境中并没有使用try catch,反之，我们同步地对
   //  虚拟DOM发送了一个虚拟的事件，然后在伪造的事件处理器中调用了用户提供的回调函数，如果回调被抛出
-  //  错，这个错误将会被全局的事件处理器捕获。但是因为错误的发生在一个不同的时间循环上下文中，
+  //  错，这个错误将会被全局的事件处理器捕获。但是因为错误的发生在一个不同的事件循环上下文中，
   //  这不会打断通常的程序流。事实上，这给我们提供了try-catch的体验但实际上并没有真的使用try-catch
   //  非常的巧妙（官方挺得意的）
 
@@ -140,7 +144,7 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
     var invokeGuardedCallbackDev = function (name, func, context, a, b, c, d, e, f) {
       //  如果document不存在,我们调用的createEvent方法的时候肯定会报错。这样会产生令人
       //  困惑的问题（详情链接：https://github.com/facebookincubator/create-react-app/issues/3482）
-      //  所以我们先发制人，跑出一个更友好的报错信息
+      //  所以我们先发制人，抛出一个更友好的报错信息
 
       // If document doesn't exist we know for sure we will crash in this method
       // when we call document.createEvent(). However this can cause confusing
@@ -148,7 +152,7 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
       // So we preemptively throw with a better message instead.
 
       //  document在react初始化的时候是定义了的，但是现在不在有定义.这有可能发生在测试环境中当
-      //  某个组件在一个异步回调中发生了更新，但此时测试已经结束了，为了解决这个问题，你可以在
+      //  某个组件在一个异步回调中发生了更新，但此时测试已经结束了。为了解决这个问题，你可以在
       //  测试完成时卸载组件（确保所有的异步操作在componentWillUnmoent已经取消），或者让测试过程
       //  本身变成异步的
       !(typeof document !== 'undefined') ? invariant(false, 'The `document` global was defined when React was initialized, but is not defined anymore. This can happen in a test environment if a component schedules an update from an asynchronous callback, but the test has already finished running. To solve this, you can either unmount the component at the end of your test (and ensure that any asynchronous operations get canceled in `componentWillUnmount`), or you can change the test itself to be asynchronous.') : void 0;
@@ -207,6 +211,8 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
         // window.event assignment in both IE <= 10 as they throw an error
         // "Member not found" in strict mode, and in Firefox which does not
         // support window.event.
+
+        //  还原window.event
         if (typeof window.event !== 'undefined' && window.hasOwnProperty('event')) {
           window.event = windowEvent;
         }
@@ -237,17 +243,28 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
       // the callback doesn't error, but the error event was fired, we know to
       // ignore it because `didError` will be false, as described above.
       var error = void 0;
+
+      //  用这个变量控制error事件是否抛出
       // Use this to track whether the error event is ever called.
       var didSetError = false;
       var isCrossOriginError = false;
 
+      //  window下的报错处理函数
       function handleWindowError(event) {
         error = event.error;
         didSetError = true;
+        //  这里判断是否是跨域错误，根据事件的行数和列数来判断
         if (error === null && event.colno === 0 && event.lineno === 0) {
           isCrossOriginError = true;
         }
+        //  API: event.defaultPrevented,返回一个布尔值，表明当前事件是否调用了 event.preventDefault()方法。
+        //  https://developer.mozilla.org/zh-CN/docs/Web/API/Event/defaultPrevented
+
+        //  如果取消了默认行为
         if (event.defaultPrevented) {
+          //  一些error的处理句柄取消了默认行为，浏览器拦截了这些上报
+          //  我们将会记录这些并且稍后确定是否上报错误
+
           // Some other error handler has prevented default.
           // Browsers silence the error report if this happens.
           // We'll remember this to later decide whether to log it or not.
@@ -261,41 +278,62 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
         }
       }
 
+      //  创建一个事件类型
       // Create a fake event type.
       var evtType = 'react-' + (name ? name : 'invokeguardedcallback');
 
+      //  添加我们自己的时间处理方法
       // Attach our event handlers
       //  window添加检测报错
       window.addEventListener('error', handleWindowError);
-      //  添加用户回调的事件监听
+      //  在我们的react伪节点上添加用户回调的事件监听
       fakeNode.addEventListener(evtType, callCallback, false);
 
+      //  异步触发我们的自定义报错事件，如果用户提供的函数报错，这将会
+      //  触发我们的全局错误处理函数
       // Synchronously dispatch our fake event. If the user-provided function
       // errors, it will trigger our global error handler.
-      //  之前创建的事件
+
+      //  https://www.w3school.com.cn/jsref/event_initevent.asp
+      //  初始化之前创建的事件，该事件无法冒泡，无法取消默认行为
       evt.initEvent(evtType, false, false);
-      //  强制触发
+      //  在伪节点上触发事件
       fakeNode.dispatchEvent(evt);
 
+      //  恢复window.event属性
       if (windowEventDescriptor) {
         Object.defineProperty(window, 'event', windowEventDescriptor);
       }
 
+      //  如果确实报错了
       if (didError) {
         if (!didSetError) {
+          //  回调报错了，但是错误并没有触发
           // The callback errored, but the error event never fired.
+
+          //  你的组建内部抛出了一个错误，但是react不知道具体是什么
+          //  这很有可能是浏览器内部的bug,react竭尽所能地保证开发环境
+          //  下在跑错处暂停的特性,这需要一些在开发模式下的trick，这
+          //  很有可能在你的浏览器中有一些问题.可以在生产环境下触发这
+          //  报错，或者更换现代浏览器。如果你确信这是react自己的问题
+          //  你可以给我们提issue
           error = new Error('An error was thrown inside one of your components, but React ' + "doesn't know what it was. This is likely due to browser " + 'flakiness. React does its best to preserve the "Pause on ' + 'exceptions" behavior of the DevTools, which requires some ' + "DEV-mode only tricks. It's possible that these don't work in " + 'your browser. Try triggering the error in production mode, ' + 'or switching to a modern browser. If you suspect that this is ' + 'actually an issue with React, please file an issue.');
         } else if (isCrossOriginError) {
+          //  抛出了一个跨域错误，react并没有办法在开发环境中获取真实
+          //  的error对象 
+          //  https://fb.me/react-crossorigin-error
           error = new Error("A cross-origin error was thrown. React doesn't have access to " + 'the actual error object in development. ' + 'See https://fb.me/react-crossorigin-error for more information.');
         }
         //  调用系统级的error上报
         this.onError(error);
       }
 
+      //  移除我们的监听器
       // Remove our event listeners
       window.removeEventListener('error', handleWindowError);
     };
 
+    //  开发环境下替换invokeGuardedCallbackImpl
     invokeGuardedCallbackImpl = invokeGuardedCallbackDev;
   }
 }
