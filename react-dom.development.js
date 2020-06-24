@@ -324,7 +324,7 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
           //  https://fb.me/react-crossorigin-error
           error = new Error("A cross-origin error was thrown. React doesn't have access to " + 'the actual error object in development. ' + 'See https://fb.me/react-crossorigin-error for more information.');
         }
-        //  调用系统级的error上报
+        //  调用error
         this.onError(error);
       }
 
@@ -338,17 +338,20 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
   }
 }
 
-//
+//  给invokeGuardedCallbackImpl换个名字
 var invokeGuardedCallbackImpl$1 = invokeGuardedCallbackImpl;
 
+//  通过Fiber来模拟一次try_catch
 // Used by Fiber to simulate a try-catch.
 var hasError = false;
 var caughtError = null;
 
+//  通过事件流系统来捕获或者再次throw第一个error
 // Used by event system to capture/rethrow the first error.
 var hasRethrowError = false;
 var rethrowError = null;
 
+//  这里对应之前的this.onError,只是单纯的记录error
 var reporter = {
   onError: function (error) {
     hasError = true;
@@ -356,6 +359,9 @@ var reporter = {
   }
 };
 
+//  调用一个函数，同时防止函数内部发生错误。有错误时return错误，否则返回null
+//  在开发环境下，这是通过try-catch实现的。在开发环境下不直接使用try-catch的原因是
+//  我们能够替换一个不同的实现。
 /**
  * Call a function while guarding against errors that happens within it.
  * Returns an error if it throws, otherwise null.
@@ -375,6 +381,9 @@ function invokeGuardedCallback(name, func, context, a, b, c, d, e, f) {
   invokeGuardedCallbackImpl$1.apply(reporter, arguments);
 }
 
+//  跟invokeGuardedCallback类似，唯一的不同是它并不返回一个error,而是将它
+//  存储在一个全局变量中，使其能够稍后被rethrowCaughtError抛出
+//  TODO: 看看caughtError和rethrowError能否合并
 /**
  * Same as invokeGuardedCallback, but instead of returning an error, it stores
  * it in a global so it can be rethrown by `rethrowCaughtError` later.
