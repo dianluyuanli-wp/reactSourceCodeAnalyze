@@ -1104,7 +1104,7 @@ function cloneElement(element, config, children) {
     }
 
     // Remaining properties override existing props
-    //  剩下的属性将会复现现存的属性
+    //  剩下的属性将会复写现存的属性
     var defaultProps = void 0;
     if (element.type && element.type.defaultProps) {
       //  element.type上的默认属性赋值给defaultProps

@@ -405,6 +405,8 @@ function invokeGuardedCallbackAndCatchFirstError(name, func, context, a, b, c, d
   }
 }
 
+//  在保护函数（就是那个封装过的运行用户传入function的函数）执行的过程中，我们
+//  将会捕获并rethrow这个error, 它将被顶层error处理句柄处理
 /**
  * During execution of guarded functions we will capture the first error which
  * we will rethrow to be handled by the top level error handler.
@@ -418,6 +420,7 @@ function rethrowCaughtError() {
   }
 }
 
+//  是否捕获error
 function hasCaughtError() {
   return hasError;
 }
@@ -430,20 +433,25 @@ function clearCaughtError() {
     caughtError = null;
     return error;
   } else {
+    //  clearCaughtError被调用但是当下并没有error被捕获，这个错误很有可能
+    //  是由于react内部的错误引起的，请给我们提issue
     invariant(false, 'clearCaughtError was called but no error was captured. This error is likely caused by a bug in React. Please file an issue.');
   }
 }
 
+//  事件插件的可注入顺序
 /**
  * Injectable ordering of event plugins.
  */
 var eventPluginOrder = null;
 
+//  从名字到事件插件模块的可注入映射
 /**
  * Injectable mapping from names to event plugin modules.
  */
 var namesToPlugins = {};
 
+//  通过注入的插件和插件的顺序重新计算插件列表
 /**
  * Recomputes the plugin list using the injected plugins and plugin ordering.
  *
@@ -452,6 +460,7 @@ var namesToPlugins = {};
 //  重新计算插件顺序
 function recomputePluginOrdering() {
   if (!eventPluginOrder) {
+    //  在eventPluginOrder被注入前保持等待
     // Wait until an `eventPluginOrder` is injected.
     return;
   }
@@ -459,23 +468,28 @@ function recomputePluginOrdering() {
   for (var pluginName in namesToPlugins) {
     var pluginModule = namesToPlugins[pluginName];
     var pluginIndex = eventPluginOrder.indexOf(pluginName);
+    //  如果插件没有出现在排序插件列表里
+    //  事件插件登记：不能注入在排序插件列表中没有注册的插件
     !(pluginIndex > -1) ? invariant(false, 'EventPluginRegistry: Cannot inject event plugins that do not exist in the plugin ordering, `%s`.', pluginName) : void 0;
     //  如果已经有了插件，那就校验下一个
     if (plugins[pluginIndex]) {
       continue;
     }
     //  校验是否存在extractEvent方法
+    //  EventPluginRegistry: 时间插件必须实现extractEvents方法，但是xxx插件没有
     !pluginModule.extractEvents ? invariant(false, 'EventPluginRegistry: Event plugins must implement an `extractEvents` method, but `%s` does not.', pluginName) : void 0;
-    //  给插件数组注册模块
+    //  给插件数组注册模块，其顺序跟eventPluginOrder一致
     plugins[pluginIndex] = pluginModule;
     var publishedEvents = pluginModule.eventTypes;
     for (var eventName in publishedEvents) {
       //  发布插件的事件，返回bool值
+      //  EventPluginRegistry: 插件xx的xxs事件发布失败
       !publishEventForPlugin(publishedEvents[eventName], pluginModule, eventName) ? invariant(false, 'EventPluginRegistry: Failed to publish event `%s` for plugin `%s`.', eventName, pluginName) : void 0;
     }
   }
 }
 
+//  发布一个事件，使其能够被应用的插件所处理
 /**
  * Publishes an event so that it can be dispatched by the supplied plugin.
  *
@@ -487,14 +501,18 @@ function recomputePluginOrdering() {
 //  发布一个事件，使其能够被插件分发
 function publishEventForPlugin(dispatchConfig, pluginModule, eventName) {
   //  名称校验
+  //  判断这个事件名的配置是否已经注册
+  //  EventPluginHub：有多个插件使用同一个名字
   !!eventNameDispatchConfigs.hasOwnProperty(eventName) ? invariant(false, 'EventPluginHub: More than one plugin attempted to publish the same event name, `%s`.', eventName) : void 0;
   //  注册配置配置
   eventNameDispatchConfigs[eventName] = dispatchConfig;
 
+  //  分阶段注册的名字
   var phasedRegistrationNames = dispatchConfig.phasedRegistrationNames;
   //  如果有多个已注册的名字，就遍历并发布
   if (phasedRegistrationNames) {
     for (var phaseName in phasedRegistrationNames) {
+      //  只针对自有属性进行处理
       if (phasedRegistrationNames.hasOwnProperty(phaseName)) {
         var phasedRegistrationName = phasedRegistrationNames[phaseName];
         publishRegistrationName(phasedRegistrationName, pluginModule, eventName);
@@ -510,6 +528,8 @@ function publishEventForPlugin(dispatchConfig, pluginModule, eventName) {
   return false;
 }
 
+//  发布一个注册的名字（用来区分分发事件）
+
 /**
  * Publishes a registration name that is used to identify dispatched events.
  *
@@ -519,6 +539,7 @@ function publishEventForPlugin(dispatchConfig, pluginModule, eventName) {
  */
 function publishRegistrationName(registrationName, pluginModule, eventName) {
   //  验证是否有重复的登记名，有的话报错
+  //  EventPluginHub: 有多个插件使用同一个登记名
   !!registrationNameModules[registrationName] ? invariant(false, 'EventPluginHub: More than one plugin attempted to publish the same registration name, `%s`.', registrationName) : void 0;
   //  记录模块
   registrationNameModules[registrationName] = pluginModule;
@@ -528,20 +549,24 @@ function publishRegistrationName(registrationName, pluginModule, eventName) {
   //  记录登记名
   {
     var lowerCasedName = registrationName.toLowerCase();
+    //  可能的登记名map
     possibleRegistrationNames[lowerCasedName] = registrationName;
     //  双击事件另外处理
     if (registrationName === 'onDoubleClick') {
+      //  给ondblclick换个名字onDoubleClick
       possibleRegistrationNames.ondblclick = registrationName;
     }
   }
 }
 
+//  注册插件，方便后续的提取和事件分发
 /**
  * Registers plugins so that they can extract and dispatch events.
  *
  * @see {EventPluginHub}
  */
 
+//  注入插件的排序列表 
 /**
  * Ordered list of injected plugins.
  */
@@ -549,12 +574,14 @@ function publishRegistrationName(registrationName, pluginModule, eventName) {
  // 注入的有序插件，可以提取和分发事件
 var plugins = [];
 
+//  事件名和分发配置之间的映射
 /**
  * Mapping from event name to dispatch config
  */
 //  把事件名和分发的配置结合起来
 var eventNameDispatchConfigs = {};
 
+//  登记名和插件模块之间的映射
 /**
  * Mapping from registration name to plugin module
  */
@@ -567,6 +594,8 @@ var registrationNameModules = {};
 //  把登记名和事件名映射
 var registrationNameDependencies = {};
 
+//  将小写的登记名映射到合适的版本，过去用来在确实时间处理句柄时报错用
+//  只有在true时可用
 /**
  * Mapping from lowercase registration names to the properly cased version,
  * used to warn in the case of missing event handlers. Available
@@ -575,8 +604,11 @@ var registrationNameDependencies = {};
  */
 //  把小写的登记名映射到合适的大小写
 var possibleRegistrationNames = {};
+//  相信开发者只会使用真实的possibleRegistrationNames
 // Trust the developer to only use possibleRegistrationNames in true
 
+//  注入排序后的插件（根据插件的名字排序）。这使得排序能够从实际的插件注入中解耦
+//  ,从而排序始终是动态的，忽略打包、动态注入等等的影响
 /**
  * Injects an ordering of plugins (by plugin name). This allows the ordering
  * to be decoupled from injection of the actual plugins so that ordering is
@@ -586,7 +618,9 @@ var possibleRegistrationNames = {};
  * @internal
  * @see {EventPluginHub.injection.injectEventPluginOrder}
  */
+//  注入时间插件排序
 function injectEventPluginOrder(injectedEventPluginOrder) {
+  //  如果已经有排序的时间插件
   !!eventPluginOrder ? invariant(false, 'EventPluginRegistry: Cannot inject event plugin ordering more than once. You are likely trying to load more than one copy of React.') : void 0;
   // Clone the ordering so it cannot be dynamically mutated.
   //  克隆一个副本
@@ -594,6 +628,9 @@ function injectEventPluginOrder(injectedEventPluginOrder) {
   recomputePluginOrdering();
 }
 
+//  被事件插件总线使用的注入插件，插件名字的顺序需要跟injectEventPluginOrder顺序
+//  保持一致
+//  插件注入能够作为页面初始化的一部分，或者动态注入
 /**
  * Injects plugins to be used by `EventPluginHub`. The plugin names must be
  * in the ordering injected by `injectEventPluginOrder`.
@@ -604,6 +641,7 @@ function injectEventPluginOrder(injectedEventPluginOrder) {
  * @internal
  * @see {EventPluginHub.injection.injectEventPluginsByName}
  */
+//  根据名字注入事件插件
 function injectEventPluginsByName(injectedNamesToPlugins) {
   var isOrderingDirty = false;
   for (var pluginName in injectedNamesToPlugins) {
@@ -612,12 +650,14 @@ function injectEventPluginsByName(injectedNamesToPlugins) {
       continue;
     }
     var pluginModule = injectedNamesToPlugins[pluginName];
-    //  如果名字到插件的映射没有作为自有属性的插件，或者两个集合的映射不一致
+    //  如果名字到插件的映射中没有注册这个插件，或者两个集合的映射不一致
     if (!namesToPlugins.hasOwnProperty(pluginName) || namesToPlugins[pluginName] !== pluginModule) {
-      //  针对二者不一致的情况
+      //  如果已将有了同名插件
+      //  EventPluginRegistry: 注入的两个时间插件不能使用同一个名字
       !!namesToPlugins[pluginName] ? invariant(false, 'EventPluginRegistry: Cannot inject two different event plugins using the same name, `%s`.', pluginName) : void 0;
-      //  针对属性不一致的情况
+      //  添加新的插件
       namesToPlugins[pluginName] = pluginModule;
+      //  标识顺序已经被打乱
       isOrderingDirty = true;
     }
   }
@@ -626,6 +666,10 @@ function injectEventPluginsByName(injectedNamesToPlugins) {
     recomputePluginOrdering();
   }
 }
+
+//  跟invariant类似，但是它仅仅在条件不满足时才输入logs.他可以在开发环境下输出
+//  带绝对路径的log.在生产环境下移除log代码将会保持一样的逻辑并且遵循一致
+//  的代码路径
 
 /**
  * Similar to invariant but only logs a warning if the condition is not met.
@@ -644,10 +688,14 @@ var warningWithoutStack = function () {};
     }
 
     if (format === undefined) {
+      //  告警信息需要参数
       throw new Error('`warningWithoutStack(condition, format, ...args)` requires a warning ' + 'message argument');
     }
     if (args.length > 8) {
+      //  检查条件是否满足以便更早的捕获错误
       // Check before the condition to catch violations early.
+
+      //  warningWithoutStach只支持8个参数
       throw new Error('warningWithoutStack() currently supports at most 8 arguments.');
     }
     if (condition) {
@@ -659,11 +707,18 @@ var warningWithoutStack = function () {};
       });
       argsWithFormat.unshift('Warning: ' + format);
 
+      //  这里不直接使用.apply是因为在IE9下会有问题
+      //  这个用法看不懂的，看看这篇https://www.cnblogs.com/web-record/p/10477778.html
+
       // We intentionally don't use spread (or .apply) directly because it
       // breaks IE9: https://github.com/facebook/react/issues/13610
       Function.prototype.apply.call(console.error, console, argsWithFormat);
     }
     try {
+      //  欢迎为react debug
+      //  为了方便起见，报错在这里将会被抛出，你就可以用这里的调用栈其找出
+      //  触发这个错误调用位置
+
       // --- Welcome to debugging React ---
       // This error was thrown as a convenience so that you can use this stack
       // to find the callsite that caused this warning to fire.
@@ -672,27 +727,37 @@ var warningWithoutStack = function () {};
         return args[argIndex++];
       });
       throw new Error(message);
-    } catch (x) {}
+    } catch (x) {
+      //  可以在这里输入error,方便调试
+    }
   };
 }
 
 var warningWithoutStack$1 = warningWithoutStack;
 
+//  从节点获取fiber当前的属性
 var getFiberCurrentPropsFromNode = null;
+//  从节点获取实例
 var getInstanceFromNode = null;
+//  从实例获取节点
 var getNodeFromInstance = null;
 
 //  设置组件树
 function setComponentTree(getFiberCurrentPropsFromNodeImpl, getInstanceFromNodeImpl, getNodeFromInstanceImpl) {
+  //  替换getFiberCurrentPropsFromNode的实现
   getFiberCurrentPropsFromNode = getFiberCurrentPropsFromNodeImpl;
+  //  替换getInstanceFromNode的实现
   getInstanceFromNode = getInstanceFromNodeImpl;
+  //  替换getNodeFromInstance的实现
   getNodeFromInstance = getNodeFromInstanceImpl;
   {
+    //  EventPluginUtils.setComponentTree: 注入的模块丢失了getNodeFromInstance或getInstanceFromNode的实现
     !(getNodeFromInstance && getInstanceFromNode) ? warningWithoutStack$1(false, 'EventPluginUtils.setComponentTree(...): Injected ' + 'module is missing getNodeFromInstance or getInstanceFromNode.') : void 0;
   }
 }
 
-//  验证事件的发送发性
+//  验证事件的触发
+//  实例的数目和其上的监听器的数目要一一对应
 var validateEventDispatches = void 0;
 {
   validateEventDispatches = function (event) {
@@ -706,10 +771,12 @@ var validateEventDispatches = void 0;
     var instancesLen = instancesIsArr ? dispatchInstances.length : dispatchInstances ? 1 : 0;
 
     //  实例和监听器的长度要一致，性质也要一致
+    //  EventPluginUtils: 不可用的事件
     !(instancesIsArr === listenersIsArr && instancesLen === listenersLen) ? warningWithoutStack$1(false, 'EventPluginUtils: Invalid `event`.') : void 0;
   };
 }
 
+//  将事件分发到监听器
 /**
  * Dispatch the event to the listener.
  * @param {SyntheticEvent} event SyntheticEvent to handle
@@ -717,21 +784,25 @@ var validateEventDispatches = void 0;
  * @param {*} inst Internal component instance
  */
 
- // 执行发送
+ // 执行事件触发
 function executeDispatch(event, listener, inst) {
   var type = event.type || 'unknown-event';
-  //  获取实例对象
+  //  修改事件的当前目标为实例对应的node元素
   event.currentTarget = getNodeFromInstance(inst);
+  //  执行绑定的函数
   invokeGuardedCallbackAndCatchFirstError(type, listener, undefined, event);
   event.currentTarget = null;
 }
 
+//  通过事件手机的分发进行标准/简单的迭代
 /**
  * Standard/simple iteration through an event's collected dispatches.
  */
 //  按顺序调度事件
 function executeDispatchesInOrder(event) {
+  //  事件分发的监听器
   var dispatchListeners = event._dispatchListeners;
+  //  事件分发的实例
   var dispatchInstances = event._dispatchInstances;
   {
     //  先校验
@@ -743,9 +814,11 @@ function executeDispatchesInOrder(event) {
       if (event.isPropagationStopped()) {
         break;
       }
+      //  监听器和实例是两个平行的数组，二者是同步的
       // Listeners and Instances are two parallel arrays that are always in sync.
       executeDispatch(event, dispatchListeners[i], dispatchInstances[i]);
     }
+    //  如果dispatchListeners不是数组
   } else if (dispatchListeners) {
     executeDispatch(event, dispatchListeners, dispatchInstances);
   }
@@ -757,6 +830,9 @@ function executeDispatchesInOrder(event) {
  * @see executeDispatchesInOrderStopAtTrueImpl
  */
 
+ // 直接分发的执行-一个事件最多累计有一个分发否则的话就是error.一个事件上
+ // 有多个分发（冒泡）去追踪每个分发执行后的返回值是没有意义的，但是在处理
+ // 直接分发时是有意义的
 
 /**
  * Execution of a "direct" dispatch - there must be at most one dispatch
@@ -774,6 +850,11 @@ function executeDispatchesInOrder(event) {
  * @return {boolean} True iff number of dispatches accumulated is greater than 0.
  */
 
+ // 进行整合的第一个参数不能为null或者underfined,这个过去是为了保护内存避免数组的分配。
+ // 因此牺牲了API的简洁性。因为‘current’可能在传入的时候为null，在函数执行之后就不是null
+ // 确保将其指回current
+ // 这个api应该谨慎使用，尝试累加一些比较合规的参数
+
 /**
  * Accumulates items that must not be null or undefined into the first one. This
  * is used to conserve memory by avoiding array allocations, and thus sacrifices
@@ -789,12 +870,15 @@ function executeDispatchesInOrder(event) {
 
  // 聚合函数，把两个东西拼成一个数组
 function accumulateInto(current, next) {
+  //  聚合的元素不能为null或者undefined
   !(next != null) ? invariant(false, 'accumulateInto(...): Accumulated items must not be null or undefined.') : void 0;
 
   if (current == null) {
     return next;
   }
 
+  //  curretn和next都不为空。告警：永远不要调用x.concat(y)等你不确定x是否是数组的时候
+  //  x很有可能是字符串（字符串也有concat方法）
   // Both are not empty. Warning: Never call x.concat(y) when you are not
   // certain that x is an Array (x could be a string with concat method).
   if (Array.isArray(current)) {
