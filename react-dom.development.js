@@ -892,6 +892,7 @@ function accumulateInto(current, next) {
   }
 
   if (Array.isArray(next)) {
+    //  修改next优点太危险了
     // A bit too dangerous to mutate `next`.
     return [current].concat(next);
   }
@@ -899,6 +900,9 @@ function accumulateInto(current, next) {
   return [current, next];
 }
 
+//  arr: 为数组或者单个的元素。当其和‘accumulate’的模块对比时有用。这是一个
+//  使得我们能够对元素集合进行推理的简单的实例，但是我们处理了只有单个元素的
+//  case,此时我们并不需要分配一个数组
 /**
  * @param {array} arr an "accumulation" of items which is either an Array or
  * a single item. Useful when paired with the `accumulate` module. This is a
@@ -908,6 +912,7 @@ function accumulateInto(current, next) {
  * @param {function} cb Callback invoked with each element or a collection.
  * @param {?} [scope] Scope used as `this` in a callback.
  */
+//  给每个元素调用回调
 function forEachAccumulated(arr, cb, scope) {
   if (Array.isArray(arr)) {
     arr.forEach(cb, scope);
@@ -916,6 +921,7 @@ function forEachAccumulated(arr, cb, scope) {
   }
 }
 
+//  内部的事件队列，累积了他们的分发，等待分发依次执行
 /**
  * Internal queue of events that have accumulated their dispatches and are
  * waiting to have their dispatches executed.
@@ -923,12 +929,14 @@ function forEachAccumulated(arr, cb, scope) {
 //  事件队列
 var eventQueue = null;
 
+//  分派事件并将其释放回池中，除非是持久的。
 /**
  * Dispatches an event and releases it back into the pool, unless persistent.
  *
  * @param {?object} event Synthetic event to be dispatched.
  * @private
  */
+//  执行事件的分发并释放
 var executeDispatchesAndRelease = function (event) {
   if (event) {
     //  按顺序执行调度事件
