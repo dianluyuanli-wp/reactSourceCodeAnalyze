@@ -476,7 +476,7 @@ function recomputePluginOrdering() {
       continue;
     }
     //  校验是否存在extractEvent方法
-    //  EventPluginRegistry: 时间插件必须实现extractEvents方法，但是xxx插件没有
+    //  EventPluginRegistry: 事件插件必须实现extractEvents方法，但是xxx插件没有
     !pluginModule.extractEvents ? invariant(false, 'EventPluginRegistry: Event plugins must implement an `extractEvents` method, but `%s` does not.', pluginName) : void 0;
     //  给插件数组注册模块，其顺序跟eventPluginOrder一致
     plugins[pluginIndex] = pluginModule;
@@ -1002,6 +1002,7 @@ function shouldPreventMouseEvent(name, type, props) {
  * @public
  */
 
+ // 注入依赖的方法
 /**
  * Methods for injecting dependencies.
  */
@@ -1023,16 +1024,22 @@ var injection = {
  * @param {string} registrationName Name of listener (e.g. `onClick`).
  * @return {?function} The stored callback.
  */
+//  获取监听器
 function getListener(inst, registrationName) {
   var listener = void 0;
+
+  //  TODO: shouldPreventMouseEvent是一个针对特殊DOM的方法，完全不应该
+  //  出现在这里，应该被移到别的地方
 
   // TODO: shouldPreventMouseEvent is DOM-specific and definitely should not
   // live here; needs to be moved to a better place soon
   var stateNode = inst.stateNode;
   if (!stateNode) {
+    //  正在进行中（例如onload事件在增量模式中）
     // Work in progress (ex: onload events in incremental mode).
     return null;
   }
+  //  获取当前节点的属性
   var props = getFiberCurrentPropsFromNode(stateNode);
   if (!props) {
     // Work in progress.
@@ -1044,10 +1051,13 @@ function getListener(inst, registrationName) {
     return null;
   }
   //  判断是否要返回监听器
+
+  //  预想中的xxx监听器应该是个函数，但是获取到了一个xxx类型的值
   !(!listener || typeof listener === 'function') ? invariant(false, 'Expected `%s` listener to be a function, instead got a value of `%s` type.', registrationName, typeof listener) : void 0;
   return listener;
 }
 
+//  允许注册插件有机会从顶层原生浏览器事件中提取事件
 /**
  * Allows registered plugins an opportunity to extract events from top-level
  * native browser events.
@@ -1059,6 +1069,7 @@ function extractEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget)
   var events = null;
   //  遍历所有的插件，把提取到的事件都放在一起
   for (var i = 0; i < plugins.length; i++) {
+    //  并不是所有的排序插件在运行时都会被加载
     // Not every plugin in the ordering may be loaded at runtime.
     var possiblePlugin = plugins[i];
     if (possiblePlugin) {
@@ -1071,11 +1082,15 @@ function extractEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget)
   return events;
 }
 
-//  一次运行多个事件
+//  批量运行事件
 function runEventsInBatch(events) {
   if (events !== null) {
+    //  更新事件队列
     eventQueue = accumulateInto(eventQueue, events);
   }
+
+  //  在正式处理前设置事件队列为null，从而使得我们能够区分是否在处理的
+  //  过程中有更多事件入队
 
   // Set `eventQueue` to null before processing it so that we can tell if more
   // events get enqueued while processing.
@@ -1087,8 +1102,12 @@ function runEventsInBatch(events) {
   }
   //  遍历事件队列，执行并且释放
   forEachAccumulated(processingEventQueue, executeDispatchesAndReleaseTopLevel);
+  //  如果在执行过程中eventQueue有了新的成员，则报错
+  //  processEventQueue: 在处理事件队列的过程中有新的事件入队，
+  //  等下不支持这种功能
   !!eventQueue ? invariant(false, 'processEventQueue(): Additional events were enqueued while processing an event queue. Support for this has not yet been implemented.') : void 0;
   // This would be a good time to rethrow if any of the event handlers threw.
+  //  如果在事件处理的过程中有报错的话，这是一个重新抛错的好时机
   rethrowCaughtError();
 }
 //  一次跑提取出来的多个事件
@@ -1099,8 +1118,11 @@ function runExtractedEventsInBatch(topLevelType, targetInst, nativeEvent, native
 
 var FunctionComponent = 0;
 var ClassComponent = 1;
+//  在能够判断组件到底是函数组件或者类组件前，其定义为模糊组件
 var IndeterminateComponent = 2; // Before we know whether it is function or class
+//  组件树的根，能够内嵌到其他节点中
 var HostRoot = 3; // Root of a host tree. Could be nested inside another node.
+//  一棵子树，能够成为其他渲染器的入口
 var HostPortal = 4; // A subtree. Could be an entry point to a different renderer.
 var HostComponent = 5;
 var HostText = 6;
@@ -1121,7 +1143,7 @@ var randomKey = Math.random().toString(36).slice(2);
 var internalInstanceKey = '__reactInternalInstance$' + randomKey;
 var internalEventHandlersKey = '__reactEventHandlers$' + randomKey;
 
-//  预加载fiber node
+//  预缓存fiber node
 function precacheFiberNode(hostInst, node) {
   node[internalInstanceKey] = hostInst;
 }
@@ -1130,7 +1152,7 @@ function precacheFiberNode(hostInst, node) {
  * Given a DOM node, return the closest ReactDOMComponent or
  * ReactDOMTextComponent instance ancestor.
  */
-//  根据一个已知的dom节点，返回最近的节点的祖先
+//  根据一个已知的dom节点，返回最近的reactDom组件或者下一个节点reactDom组件的祖先
 function getClosestInstanceFromNode(node) {
   if (node[internalInstanceKey]) {
     return node[internalInstanceKey];
