@@ -439,13 +439,13 @@ function clearCaughtError() {
   }
 }
 
-//  事件插件的可注入顺序
+//  事件插件的顺序列表（可注入的）
 /**
  * Injectable ordering of event plugins.
  */
 var eventPluginOrder = null;
 
-//  从名字到事件插件模块的可注入映射
+//  从名字到事件插件模块的映射
 /**
  * Injectable mapping from names to event plugin modules.
  */
@@ -457,6 +457,10 @@ var namesToPlugins = {};
  *
  * @private
  */
+
+//  这里的eventPluginOrder其实就是DOMEventPluginOrder，是一个字符串数组，里面有
+//  插件的名字
+//  将eventPluginOrder中的插件同序号复制到plugins，并且发布事件
 //  重新计算插件顺序
 function recomputePluginOrdering() {
   if (!eventPluginOrder) {
@@ -594,7 +598,7 @@ var registrationNameModules = {};
 //  把登记名和事件名映射
 var registrationNameDependencies = {};
 
-//  将小写的登记名映射到合适的版本，过去用来在确实时间处理句柄时报错用
+//  将小写的登记名映射到合适的版本，过去用来在缺少事件处理句柄时报错用
 //  只有在true时可用
 /**
  * Mapping from lowercase registration names to the properly cased version,
@@ -1104,7 +1108,7 @@ function runEventsInBatch(events) {
   forEachAccumulated(processingEventQueue, executeDispatchesAndReleaseTopLevel);
   //  如果在执行过程中eventQueue有了新的成员，则报错
   //  processEventQueue: 在处理事件队列的过程中有新的事件入队，
-  //  等下不支持这种功能
+  //  当下不支持这种功能
   !!eventQueue ? invariant(false, 'processEventQueue(): Additional events were enqueued while processing an event queue. Support for this has not yet been implemented.') : void 0;
   // This would be a good time to rethrow if any of the event handlers threw.
   //  如果在事件处理的过程中有报错的话，这是一个重新抛错的好时机
