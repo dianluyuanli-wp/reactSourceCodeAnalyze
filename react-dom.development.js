@@ -1128,7 +1128,9 @@ var IndeterminateComponent = 2; // Before we know whether it is function or clas
 var HostRoot = 3; // Root of a host tree. Could be nested inside another node.
 //  一棵子树，能够成为其他渲染器的入口
 var HostPortal = 4; // A subtree. Could be an entry point to a different renderer.
+//  主组件
 var HostComponent = 5;
+//  文案型根节点
 var HostText = 6;
 var Fragment = 7;
 var Mode = 8;
@@ -1156,7 +1158,7 @@ function precacheFiberNode(hostInst, node) {
  * Given a DOM node, return the closest ReactDOMComponent or
  * ReactDOMTextComponent instance ancestor.
  */
-//  根据一个已知的dom节点，返回最近的reactDom组件或者下一个节点reactDom组件的祖先
+//  根据一个已知的dom节点，返回最近的reactDom组件或者ReactDOMTextComponent实例的祖先
 function getClosestInstanceFromNode(node) {
   if (node[internalInstanceKey]) {
     return node[internalInstanceKey];
@@ -1167,6 +1169,7 @@ function getClosestInstanceFromNode(node) {
     if (node.parentNode) {
       node = node.parentNode;
     } else {
+      //  如果到了树顶，这个节点要么不是react 树的节点，要么没有加载
       // Top of the tree. This node must not be part of a React tree (or is
       // unmounted, potentially).
       return null;
@@ -1176,6 +1179,7 @@ function getClosestInstanceFromNode(node) {
   //  如果这个父节点的tag是固定的类型，返回
   var inst = node[internalInstanceKey];
   if (inst.tag === HostComponent || inst.tag === HostText) {
+    //  在Fiber中，这个永远是最深的根节点
     // In Fiber, this will always be the deepest root.
     return inst;
   }
@@ -1183,6 +1187,8 @@ function getClosestInstanceFromNode(node) {
   return null;
 }
 
+//  给一个DOM节点，返回ReactDOMComponent或者ReactDOMTextComponent的实例，
+//  如果这个组件根本没有被渲染的话返回null
 /**
  * Given a DOM node, return the ReactDOMComponent or ReactDOMTextComponent
  * instance, or null if the node was not rendered by this React.
@@ -1200,6 +1206,7 @@ function getInstanceFromNode$1(node) {
   return null;
 }
 
+//  根据ReactDOMComponent或者ReactDOMTextComponent，返回与之对应的DOM节点
 /**
  * Given a ReactDOMComponent or ReactDOMTextComponent, return the corresponding
  * DOM node.
@@ -1207,20 +1214,24 @@ function getInstanceFromNode$1(node) {
 //  根据节点（react）返回dom节点
 function getNodeFromInstance$1(inst) {
   if (inst.tag === HostComponent || inst.tag === HostText) {
+    //  在fiber中，这个目前还是状态节点，我们假设它将会变成hose组件或者hose文案
     // In Fiber this, is just the state node right now. We assume it will be
     // a host component or host text.
     return inst.stateNode;
   }
 
+  //  如果没有这个报错的话，传递一个非Dom组价将会触发没有父组件的报错，这很令人疑惑
   // Without this first invariant, passing a non-DOM-component triggers the next
   // invariant for a missing parent, which is super confusing.
   invariant(false, 'getNodeFromInstance: Invalid argument.');
 }
 
+//  从节点中获取当前的fiber属性
 function getFiberCurrentPropsFromNode$1(node) {
   return node[internalEventHandlersKey] || null;
 }
 
+//  更新fiber属性
 function updateFiberProps(node, props) {
   node[internalEventHandlersKey] = props;
 }
@@ -1229,6 +1240,10 @@ function updateFiberProps(node, props) {
 function getParent(inst) {
   do {
     inst = inst.return;
+    //  如果这个跟节点，我们就要退出
+    //  这取决于我们是否想要嵌套子树将事件冒泡到他们的父组件。我们也会
+    //  遍历父主节点节点但是这在reactNative上无效，使得我们无法使用
+    //  portal特性
     // TODO: If this is a HostRoot we might want to bail out.
     // That is depending on if we want nested subtrees (layers) to bubble
     // events to their parent. We could also go through parentNode on the
@@ -1245,7 +1260,7 @@ function getParent(inst) {
  * Return the lowest common ancestor of A and B, or null if they are in
  * different trees.
  */
-//  返回两个react实例的最近的祖先元素
+//  返回两个react实例的最近的共同祖先元素，如果是不同树上的节点，返回null
 function getLowestCommonAncestor(instA, instB) {
   //  获取两个节点的深度
   var depthA = 0;
@@ -1274,9 +1289,11 @@ function getLowestCommonAncestor(instA, instB) {
   // Walk in lockstep until we find a match.
   var depth = depthA;
   while (depth--) {
+    //  实例a等于实例b或者b的代理时，返回
     if (instA === instB || instA === instB.alternate) {
       return instA;
     }
+    //  否则上溯
     instA = getParent(instA);
     instB = getParent(instB);
   }
@@ -1323,8 +1340,11 @@ function traverseTwoPhase(inst, fn, arg) {
  * "entered" or "left" that element.
  */
 //  遍历id层级，并且在任何需要接收mouseEnter和mouseLeave的id上调用回调函数
+//  在最近的共同祖先上并不需要调用回调因为节点本身没有进入或者离开
 function traverseEnterLeave(from, to, fn, argFrom, argTo) {
+  //  获取共同的父节点
   var common = from && to ? getLowestCommonAncestor(from, to) : null;
+  //  从from节点到公共节点的节点数组
   var pathFrom = [];
   while (true) {
     if (!from) {
@@ -1333,6 +1353,7 @@ function traverseEnterLeave(from, to, fn, argFrom, argTo) {
     if (from === common) {
       break;
     }
+    //  判断代理节点
     var alternate = from.alternate;
     if (alternate !== null && alternate === common) {
       break;
@@ -1365,15 +1386,21 @@ function traverseEnterLeave(from, to, fn, argFrom, argTo) {
   }
 }
 
+//  一些事件类型在事件传播的不同阶段有不同的登记名，这个方法返回特定状态
+//  的监听器
 /**
  * Some event types have a notion of different registration names for different
  * "phases" of propagation. This finds listeners by a given phase.
  */
-//  部分事件类型在事件传播的不同阶段有不同的登记名，这个方法通过已知态寻找监听器
 function listenerAtPhase(inst, event, propagationPhase) {
   var registrationName = event.dispatchConfig.phasedRegistrationNames[propagationPhase];
   return getListener(inst, registrationName);
 }
+
+//  一个小的传播模式集合，其中的每一个都会接收少量信息，并且产生一个`已经分发号的时间对象`
+//  的集合，该事件集合中的每一个元素都已经被标记了已经分发了监听器的函数或者id.aip这样
+//  设计是为了避免这些传播策略事实上执行了事件分发，因此我们总是收集整个分发事件的集合
+//  尽管事实上只执行单个事件
 
 /**
  * A small set of propagation patterns, each of which will accept a small amount
