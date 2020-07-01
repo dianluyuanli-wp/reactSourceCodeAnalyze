@@ -1412,6 +1412,9 @@ function listenerAtPhase(inst, event, propagationPhase) {
  * single one.
  */
 
+//  给分发的监听器打上’合成事件‘的标。在这里创建这个函数，使得我们不必绑定或者为每个
+//  事件创建函数。改变事件成员数目使得我们不必创建一个包裹分发对象与事件监听器配对
+
 /**
  * Tags a `SyntheticEvent` with dispatched listeners. Creating this function
  * here, allows us to not have to bind or create functions for each event.
@@ -1422,8 +1425,10 @@ function listenerAtPhase(inst, event, propagationPhase) {
 //  phase针对的是状态，具体来说可以是bubble或者catch
 function accumulateDirectionalDispatches(inst, phase, event) {
   {
+    //  分发的实例不能为null
     !inst ? warningWithoutStack$1(false, 'Dispatching inst must not be null') : void 0;
   }
+  //  获取该阶段的监听器
   var listener = listenerAtPhase(inst, event, phase);
   if (listener) {
     //  监听器聚合和实例聚合
@@ -1432,6 +1437,9 @@ function accumulateDirectionalDispatches(inst, phase, event) {
   }
 }
 
+//  收集分发（在分发之前必须整体收集，见单元测试）。懒分配数组以便保存内存。我们必须
+//  循环遍历每一个事件。我们无法遍历整个事件集合中的每一个元素，因为每个事件都有不同
+//  的目标
 /**
  * Collect dispatches (must be entirely collected before dispatching - see unit
  * tests). Lazily allocate the array to conserve memory.  We must loop through
@@ -1442,10 +1450,13 @@ function accumulateDirectionalDispatches(inst, phase, event) {
 //  在分发前要对事件进行收集，懒分配数组一遍保存内存，必须循环事件并且遍历每一个
 function accumulateTwoPhaseDispatchesSingle(event) {
   if (event && event.dispatchConfig.phasedRegistrationNames) {
+    //  这里的two phase指的是事件冒泡和捕获两种状态
     traverseTwoPhase(event._targetInst, accumulateDirectionalDispatches, event);
   }
 }
 
+//  不考虑方向的合并，并不查找当前状态的登记名。跟accumulateDirectDispatchesSingle
+//  一样但是并不需要dispatchMarker和分发id保持一致
 /**
  * Accumulates without regard to direction, does not look for phased
  * registration names. Same as `accumulateDirectDispatchesSingle` but without
@@ -1463,12 +1474,12 @@ function accumulateDispatches(inst, ignoredDirection, event) {
   }
 }
 
+//  在合成事件上聚合分发，但是仅仅针对dispatchMarker
 /**
  * Accumulates dispatches on an `SyntheticEvent`, but only for the
  * `dispatchMarker`.
  * @param {SyntheticEvent} event
  */
-//  通过事件来调用聚合分发
 function accumulateDirectDispatchesSingle(event) {
   if (event && event.dispatchConfig.registrationName) {
     accumulateDispatches(event._targetInst, null, event);
@@ -1486,16 +1497,19 @@ function accumulateEnterLeaveDispatches(leave, enter, from, to) {
 }
 
 //  聚合直接分发事件，只在当前节点触发，入参是数组，只是简单的遍历
+//  这个不区分是冒泡还是捕获
 function accumulateDirectDispatches(events) {
   forEachAccumulated(events, accumulateDirectDispatchesSingle);
 }
 
+//  是否能够使用dom相关api
 var canUseDOM = !!(typeof window !== 'undefined' && window.document && window.document.createElement);
 
 // Do not uses the below two methods directly!
 // Instead use constants exported from DOMTopLevelEventTypes in ReactDOM.
 // (It is the only module that is allowed to access these methods.)
-//  永远不要使用这些方法
+//  永远不要直接使用这些方法
+//  作为替代，使用ReactDOM中的DOMTopLevelEventTypes来获取
 function unsafeCastStringToDOMTopLevelType(topLevelType) {
   return topLevelType;
 }
@@ -1504,6 +1518,7 @@ function unsafeCastDOMTopLevelTypeToString(topLevelType) {
   return topLevelType;
 }
 
+//  建立浏览器厂商前缀和样式属性与事件名之间的映射
 /**
  * Generate a mapping of standard vendor prefixes using the defined style property and event name.
  *
@@ -1511,7 +1526,6 @@ function unsafeCastDOMTopLevelTypeToString(topLevelType) {
  * @param {string} eventName
  * @returns {object}
  */
-//  创建前缀的映射关系
 function makePrefixMap(styleProp, eventName) {
   var prefixes = {};
 
@@ -1534,13 +1548,13 @@ var vendorPrefixes = {
   transitionend: makePrefixMap('Transition', 'TransitionEnd')
 };
 
+//  已经被标记且添加前缀的事件名（如果可用）
 /**
  * Event names that have already been detected and prefixed (if applicable).
  */
-
- // 已经处理过的事件名
 var prefixedEventNames = {};
 
+//  判断前缀的元素
 /**
  * Element to check for prefixes on.
  */
@@ -1552,6 +1566,10 @@ var style = {};
 //  dom存在时的引导程序
 if (canUseDOM) {
   style = document.createElement('div').style;
+
+  //  在一些平台上，比如某些版本的安卓4.x系统，animation和transition属性
+  //  在style对象上是没有前缀的，但是被触发时，这些事件名将会有前缀，所以
+  //  我们需要检查非前缀的事件是否可用，如果不是的话将其移除
 
   // On some platforms, in particular some releases of Android 4.x,
   // the un-prefixed "animation" and "transition" properties are defined on the
@@ -1598,6 +1616,9 @@ function getVendorPrefixedEventName(eventName) {
 
   return eventName;
 }
+
+//  为了识别ReactDom中的顶级事件，我们使用常数去定义这些模块。这是唯一使用unsafeX 方法
+//  去获取真实的浏览器事件的常数。这使得我们通过避免顶层事件到事件名的映射从而节省了一些打包大小
 
 /**
  * To identify top level events in ReactDOM, we use constants defined by this
@@ -1690,6 +1711,10 @@ var TOP_VOLUME_CHANGE = unsafeCastStringToDOMTopLevelType('volumechange');
 var TOP_WAITING = unsafeCastStringToDOMTopLevelType('waiting');
 var TOP_WHEEL = unsafeCastStringToDOMTopLevelType('wheel');
 
+//  单独需要被绑定到媒体元素上的事件的列表
+//  注意这个列表里的事件并不会被的顶层监听，除非他们在ReactBrowserEventEmitter.listenTo
+//  这个白名单上
+
 // List of events that need to be individually attached to media elements.
 // Note that events in this list will *not* be listened to at the top level
 // unless they're explicitly whitelisted in `ReactBrowserEventEmitter.listenTo`.
@@ -1700,6 +1725,11 @@ var mediaEventTypes = [TOP_ABORT, TOP_CAN_PLAY, TOP_CAN_PLAY_THROUGH, TOP_DURATI
 function getRawEventName(topLevelType) {
   return unsafeCastDOMTopLevelTypeToString(topLevelType);
 }
+
+//  这些变量存储了目标节点上的文字内容，使得能够比较赋值之前和之后的内容。
+//  识别当前选中态开始的节点位置，之后观察其内部的文字内容和在dom中的位置
+//  .因为浏览器会原生地在比较过程中替换原生节点，我们可以利用这个位置去找到
+//  这个替换
 
 /**
  * These variables store information about text content of a target node,
@@ -1717,12 +1747,14 @@ var root = null;
 var startText = null;
 var fallbackText = null;
 
+//  初始化startText
 function initialize(nativeEventTarget) {
   root = nativeEventTarget;
   startText = getText();
   return true;
 }
 
+//  重置
 function reset() {
   root = null;
   startText = null;
@@ -1741,12 +1773,14 @@ function getData() {
   var endValue = getText();
   var endLength = endValue.length;
 
+  //  从0到某个位置字符是一样的
   for (start = 0; start < startLength; start++) {
     if (startValue[start] !== endValue[start]) {
       break;
     }
   }
 
+  //  倒数，从具体某个位置字符是一样的
   var minEnd = startLength - start;
   for (end = 1; end <= minEnd; end++) {
     if (startValue[startLength - end] !== endValue[endLength - end]) {
@@ -1755,6 +1789,7 @@ function getData() {
   }
 
   var sliceTail = end > 1 ? 1 - end : undefined;
+  //  返回中间不一样的部分
   fallbackText = endValue.slice(start, sliceTail);
   return fallbackText;
 }
@@ -1770,6 +1805,7 @@ function getText() {
 
 var EVENT_POOL_SIZE = 10;
 
+//  根据w3的标准实现事件接口
 /**
  * @interface Event
  * @see http://www.w3.org/TR/DOM-Level-3-Events/
@@ -1778,10 +1814,12 @@ var EVENT_POOL_SIZE = 10;
 var EventInterface = {
   type: null,
   target: null,
+  //  currentTarget是在事件分发的时候被设置的，现在复制在这里没用
   // currentTarget is set when dispatching; no use in copying it here
   currentTarget: function () {
     return null;
   },
+  //  事件状态，捕获或者冒泡
   eventPhase: null,
   bubbles: null,
   cancelable: null,
@@ -1800,6 +1838,13 @@ function functionThatReturnsFalse() {
   return false;
 }
 
+//  合成事件是通过事件插件来分发的，通常是响应顶级事件委托处理程序。
+//  这些系统需要通过事件池来降低垃圾回收的频率。系统需要检查isPersistent
+//  来决定是否应该释放一个已经被分发的事件。用户需要一个持续性的事件
+//  来唤起persist
+
+//  合成事件（及其子类）的实现了DOM 等级3的api,这个过程中磨平了不同浏览器
+//  之间的差异，其子类不必一定要实现DOM接口，自定义特定于应用程序的事件也可以将其子类化。
 /**
  * Synthetic events are dispatched by event plugins, typically in response to a
  * top-level event delegation handler.
@@ -1818,9 +1863,11 @@ function functionThatReturnsFalse() {
  * @param {object} nativeEvent Native browser event.
  * @param {DOMEventTarget} nativeEventTarget Target node.
  */
-//  聚合事件是通过事件插件来分发的，特别是顶层的事件委托句柄
+
+ // 合成事件的构造函数
 function SyntheticEvent(dispatchConfig, targetInst, nativeEvent, nativeEventTarget) {
   {
+    //  这些事件的setter或getter会触发报错
     // these have a getter/setter for warnings
     delete this.nativeEvent;
     delete this.preventDefault;
@@ -1865,8 +1912,9 @@ function SyntheticEvent(dispatchConfig, targetInst, nativeEvent, nativeEventTarg
   return this;
 }
 
-//  对合成事件的原型进行assign
+//  对合成事件的原型进行assign，自己实现一套event API
 _assign(SyntheticEvent.prototype, {
+  //  屏蔽默认行为
   preventDefault: function () {
     this.defaultPrevented = true;
     var event = this.nativeEvent;
@@ -1880,9 +1928,11 @@ _assign(SyntheticEvent.prototype, {
     } else if (typeof event.returnValue !== 'unknown') {
       event.returnValue = false;
     }
+    //  isDefaultPrevented方法设置为返回true
     this.isDefaultPrevented = functionThatReturnsTrue;
   },
 
+  //  停止冒泡
   stopPropagation: function () {
     var event = this.nativeEvent;
     if (!event) {
@@ -1893,6 +1943,10 @@ _assign(SyntheticEvent.prototype, {
       event.stopPropagation();
       //  否则手动调用，赋值
     } else if (typeof event.cancelBubble !== 'unknown') {
+      //  ChangeEventPlugin这个插件为IE注册了注册了propertychange这个事件
+      //  这个事件不支持冒泡或者取消，并且任何cancelBubble的引用都会抛出错误
+      //  ,通过类型检查可以规避这个问题
+
       // The ChangeEventPlugin registers a "propertychange" event for
       // IE. This event does not support bubbling or cancelling, and
       // any references to cancelBubble throw "Member not found".  A
@@ -1904,6 +1958,8 @@ _assign(SyntheticEvent.prototype, {
     this.isPropagationStopped = functionThatReturnsTrue;
   },
 
+  //  我们在每个事件循环后将会释放所有的合成事件，并且把它们放回到事件池中，这
+  //  提供了一个能够获取那些不会被放回池子里的事件的引用的途径
   /**
    * We release all dispatched `SyntheticEvent`s after each event loop, adding
    * them back into the pool. This allows a way to hold onto a reference that
@@ -1913,6 +1969,7 @@ _assign(SyntheticEvent.prototype, {
     this.isPersistent = functionThatReturnsTrue;
   },
 
+  //  检查这个事件是否需要被释放回池子里
   /**
    * Checks if this event should be released back into the pool.
    *
@@ -1920,11 +1977,13 @@ _assign(SyntheticEvent.prototype, {
    */
   isPersistent: functionThatReturnsFalse,
 
+  //  事件池在每个事件被释放是都会运行destructor
   /**
    * `PooledClass` looks for `destructor` on each instance it releases.
    */
   destructor: function () {
     var Interface = this.constructor.Interface;
+    //  遍历interface中的每个属性
     for (var propName in Interface) {
       {
         //  获取聚合的警告属性的定义
