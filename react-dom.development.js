@@ -1997,6 +1997,7 @@ _assign(SyntheticEvent.prototype, {
     this.isPropagationStopped = functionThatReturnsFalse;
     this._dispatchListeners = null;
     this._dispatchInstances = null;
+    //  以下这些属性页设置get和set warning
     {
       Object.defineProperty(this, 'nativeEvent', getPooledWarningPropertyDefinition('nativeEvent', null));
       Object.defineProperty(this, 'isDefaultPrevented', getPooledWarningPropertyDefinition('isDefaultPrevented', functionThatReturnsFalse));
@@ -2009,10 +2010,10 @@ _assign(SyntheticEvent.prototype, {
 
 SyntheticEvent.Interface = EventInterface;
 
+//  帮助在创建子类的时候减少样板文件引用
 /**
  * Helper to reduce boilerplate when creating subclasses.
  */
-//  创造子类的时候减少引用,合成事件的扩展
 SyntheticEvent.extend = function (Interface) {
   var Super = this;
 
@@ -2029,6 +2030,7 @@ SyntheticEvent.extend = function (Interface) {
 
   Class.Interface = _assign({}, Super.Interface, Interface);
   Class.extend = Super.extend;
+  //  给这个类添加事件池
   addEventPoolingTo(Class);
 
   return Class;
@@ -2036,6 +2038,7 @@ SyntheticEvent.extend = function (Interface) {
 
 addEventPoolingTo(SyntheticEvent);
 
+//  在实例摧毁的时候帮助使合成事件作废
 /**
  * Helper to nullify syntheticEvent instance properties when destructing
  *
@@ -2043,9 +2046,9 @@ addEventPoolingTo(SyntheticEvent);
  * @param {?object} getVal
  * @return {object} defineProperty object
  */
-//  在摧毁的时候使合成事件无效化
 //  获取属性配置符的对象
 function getPooledWarningPropertyDefinition(propName, getVal) {
+  //  判断是设置属性值还是方法
   var isFunction = typeof getVal === 'function';
   return {
     configurable: true,
@@ -2072,12 +2075,13 @@ function getPooledWarningPropertyDefinition(propName, getVal) {
   }
 }
 
-//  获取合并的事件
+//  获取事件池的事件的事件
 function getPooledEvent(dispatchConfig, targetInst, nativeEvent, nativeInst) {
   var EventConstructor = this;
   //  如果事件构造器的实例有，那么就调用并返回
   if (EventConstructor.eventPool.length) {
     var instance = EventConstructor.eventPool.pop();
+    //  调用构造函数
     EventConstructor.call(instance, dispatchConfig, targetInst, nativeEvent, nativeInst);
     return instance;
   }
@@ -2088,8 +2092,10 @@ function getPooledEvent(dispatchConfig, targetInst, nativeEvent, nativeInst) {
 //  释放聚合事件
 function releasePooledEvent(event) {
   var EventConstructor = this;
+  //  报错：尝试释放一个与事件池内事件类型不同的事件实例
   !(event instanceof EventConstructor) ? invariant(false, 'Trying to release an event instance into a pool of a different type.') : void 0;
   event.destructor();
+  //  小于上限就推一个事件进池子
   if (EventConstructor.eventPool.length < EVENT_POOL_SIZE) {
     EventConstructor.eventPool.push(event);
   }
