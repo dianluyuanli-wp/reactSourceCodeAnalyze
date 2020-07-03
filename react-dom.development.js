@@ -1750,6 +1750,7 @@ var fallbackText = null;
 //  初始化startText
 function initialize(nativeEventTarget) {
   root = nativeEventTarget;
+  //  最开始文案
   startText = getText();
   return true;
 }
@@ -1761,6 +1762,7 @@ function reset() {
   fallbackText = null;
 }
 
+//  获得兜底文字
 function getData() {
   if (fallbackText) {
     return fallbackText;
@@ -2011,6 +2013,7 @@ _assign(SyntheticEvent.prototype, {
 SyntheticEvent.Interface = EventInterface;
 
 //  帮助在创建子类的时候减少样板文件引用
+//  提供扩展函数
 /**
  * Helper to reduce boilerplate when creating subclasses.
  */
@@ -2021,6 +2024,7 @@ SyntheticEvent.extend = function (Interface) {
   E.prototype = Super.prototype;
   var prototype = new E();
 
+  //  一个工具类
   function Class() {
     return Super.apply(this, arguments);
   }
@@ -2075,7 +2079,7 @@ function getPooledWarningPropertyDefinition(propName, getVal) {
   }
 }
 
-//  获取事件池的事件的事件
+//  获取进入事件池的事件
 function getPooledEvent(dispatchConfig, targetInst, nativeEvent, nativeInst) {
   var EventConstructor = this;
   //  如果事件构造器的实例有，那么就调用并返回
@@ -2101,6 +2105,7 @@ function releasePooledEvent(event) {
   }
 }
 
+//  给一个事件的构造器添加事件池子
 function addEventPoolingTo(EventConstructor) {
   EventConstructor.eventPool = [];
   EventConstructor.getPooled = getPooledEvent;
@@ -2111,7 +2116,7 @@ function addEventPoolingTo(EventConstructor) {
  * @interface Event
  * @see http://www.w3.org/TR/DOM-Level-3-Events/#events-compositionevents
  */
-//  合成的合成事件
+//  通过extend获得改造的合成事件
 var SyntheticCompositionEvent = SyntheticEvent.extend({
   data: null
 });
@@ -2126,6 +2131,7 @@ var SyntheticInputEvent = SyntheticEvent.extend({
   data: null
 });
 
+//  某些特殊的键值
 var END_KEYCODES = [9, 13, 27, 32]; // Tab, Return, Esc, Space
 var START_KEYCODE = 229;
 
@@ -2137,10 +2143,19 @@ if (canUseDOM && 'documentMode' in document) {
   documentMode = document.documentMode;
 }
 
+//  webkit提供了非常有用的`textInput`事件，能够用来直接表现`beforeInput`
+//  事件。IE浏览器的tetInput么有那么好用，这里放弃
+
+//  这里带一嘴，documentMode是IE浏览器的专属属性，可以用来判断浏览器内核
+//  https://www.runoob.com/jsref/prop-doc-documentmode.html
+
 // Webkit offers a very useful `textInput` event that can be used to
 // directly represent `beforeInput`. The IE `textinput` event is not as
 // useful, so we don't use it.
 var canUseTextInputEvent = canUseDOM && 'TextEvent' in window && !documentMode;
+
+//  在IE9+中，我们接触到合成事件，但是由原生合成事件提供的数据可能不正确。日文的
+//  ideographic空格不会被正确记录
 
 // In IE9+, we have access to composition events, but the data supplied
 // by the native compositionend event may be incorrect. Japanese ideographic
@@ -2154,6 +2169,7 @@ var SPACEBAR_CHAR = String.fromCharCode(SPACEBAR_CODE);
 //  事件和他们对应的属性名
 var eventTypes = {
   beforeInput: {
+    //  区分冒泡和捕获阶段的事件登记名
     phasedRegistrationNames: {
       bubbled: 'onBeforeInput',
       captured: 'onBeforeInputCapture'
@@ -2183,9 +2199,14 @@ var eventTypes = {
   }
 };
 
+//  追踪我们是否处理了空格键的摁下操作
+
 // Track whether we've ever handled a keypress on the space key.
 var hasSpaceKeypress = false;
 
+//  判断原生的摁键事件是否被作为一个命令，返回bool值。
+//  这是因为火狐浏览器触发摁键事件作为摁键命令（如复制粘贴，全选等），尽管
+//  此时并没有字符被插入
 /**
  * Return whether a native keypress event is assumed to be a command.
  * This is required because Firefox fires `keypress` events for key commands
@@ -2194,10 +2215,14 @@ var hasSpaceKeypress = false;
 //  判断是否是真实地摁键事件而不是操作指令
 function isKeypressCommand(nativeEvent) {
   return (nativeEvent.ctrlKey || nativeEvent.altKey || nativeEvent.metaKey) &&
+  //  ctrl+alt等于右alt,这个并不是命令
+  //  解释下啥是AltGr https://zhidao.baidu.com/question/1277950.html
+
   // ctrlKey && altKey is equivalent to AltGr, and is not a command.
   !(nativeEvent.ctrlKey && nativeEvent.altKey);
 }
 
+//  将顶层事件转化为事件类型
 /**
  * Translate native top level events into event types.
  *
@@ -2224,11 +2249,12 @@ function getCompositionEventType(topLevelType) {
  * @param {object} nativeEvent
  * @return {boolean}
  */
-//  我们的回调最佳猜测模型认为这个事件表示合成的开始么？
+//  我们的兜底最佳猜测模型认为这个事件表示合成的开始么？
 function isFallbackCompositionStart(topLevelType, nativeEvent) {
   return topLevelType === TOP_KEY_DOWN && nativeEvent.keyCode === START_KEYCODE;
 }
 
+//  我们的兜底模式是否认为这个事件是合成的结尾
 /**
  * Does our fallback mode think that this event is the end of composition?
  *
@@ -2239,21 +2265,30 @@ function isFallbackCompositionStart(topLevelType, nativeEvent) {
 function isFallbackCompositionEnd(topLevelType, nativeEvent) {
   switch (topLevelType) {
     case TOP_KEY_UP:
+      //  指令键插入或者清空输入法编辑器
       // Command keys insert or clear IME input.
       return END_KEYCODES.indexOf(nativeEvent.keyCode) !== -1;
     case TOP_KEY_DOWN:
+      //  在每个键摁下后期望获得输入法编辑器的键码，如果获得了其他键码
+      //  我们就应该早点退出
+
       // Expect IME keyCode on each keydown. If we get any other
       // code we must have exited earlier.
       return nativeEvent.keyCode !== START_KEYCODE;
     case TOP_KEY_PRESS:
     case TOP_MOUSE_DOWN:
     case TOP_BLUR:
+      //  事件不可能在没有唤起输入法编辑器的情况下发生
       // Events are not possible without cancelling IME.
       return true;
     default:
       return false;
   }
 }
+
+//  谷歌输入工具通过自定义事件提供了合成的数据，其在detail对象的data属性中
+//  如果这个属性在事件对象上可用，就用。如果不行，这就是一个空白的合成事件，
+//  我们并没有什么东西好提取
 
 /**
  * Google Input Tools provides composition data via a CustomEvent,
@@ -2264,7 +2299,6 @@ function isFallbackCompositionEnd(topLevelType, nativeEvent) {
  * @param {object} nativeEvent
  * @return {?string}
  */
-//  谷歌输入工具通过cust事件提供了一个合成数据
 function getDataFromCustomEvent(nativeEvent) {
   var detail = nativeEvent.detail;
   if (typeof detail === 'object' && 'data' in detail) {
@@ -2273,6 +2307,10 @@ function getDataFromCustomEvent(nativeEvent) {
   return null;
 }
 
+//  检查合成事件是否由韩语输入法编辑器触发，我们的兜底模式在韩国
+//  的IE浏览器输入法下工作的不太好。所以如果使用了韩语输入法编辑器
+//  我们就是用原生的合成事件。尽管CompositionEvent.locale这个属性
+//  被废弃了，但是它在ie中依然可用，此时我们启用了兜底模式
 /**
  * Check if a composition event was triggered by Korean IME.
  * Our fallback mode does not work well with IE's Korean IME,
@@ -2288,6 +2326,7 @@ function isUsingKoreanIME(nativeEvent) {
   return nativeEvent.locale === 'ko';
 }
 
+//  追踪当前输入法编辑器合成事件状态
 // Track the current IME composition status, if any.
 var isComposing = false;
 
@@ -2299,11 +2338,12 @@ function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEv
   var eventType = void 0;
   var fallbackData = void 0;
 
-  //  如果是合成事件，世界反悔合成事件类型
+  //  如果能够合成事件，返回合成事件类型
   if (canUseCompositionEvent) {
     eventType = getCompositionEventType(topLevelType);
-    //  如果正在合成，那么就返回合成事件的开始类型
+    //  如果不在合成，那么就返回合成事件的开始类型
   } else if (!isComposing) {
+    //  如果是兜底的合成开始
     if (isFallbackCompositionStart(topLevelType, nativeEvent)) {
       eventType = eventTypes.compositionStart;
     }
@@ -2319,6 +2359,7 @@ function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEv
 
   //  如果可以使用回调的组合事件
   if (useFallbackCompositionData && !isUsingKoreanIME(nativeEvent)) {
+    //  当前的合成是被静态存储的，在合成的过程中不允许被重写
     // The current composition is stored statically and must not be
     // overwritten while composition continues.
     if (!isComposing && eventType === eventTypes.compositionStart) {
@@ -2332,6 +2373,7 @@ function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEv
     }
   }
 
+  //  获得进入事件池的事件
   var event = SyntheticCompositionEvent.getPooled(eventType, targetInst, nativeEvent, nativeEventTarget);
 
   //  如果有回调数据，就赋值到事件上
@@ -2340,7 +2382,7 @@ function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEv
     // This matches the property of native CompositionEventInterface.
     event.data = fallbackData;
   } else {
-    //  使用通用事件的数据
+    //  使用自定义事件的数据
     var customData = getDataFromCustomEvent(nativeEvent);
     if (customData !== null) {
       event.data = customData;
@@ -2357,12 +2399,17 @@ function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEv
  * @param {object} nativeEvent Native browser event.
  * @return {?string} The string corresponding to this `beforeInput` event.
  */
-//  获取输入的键
+//  获取原生BeforeInput的键
 function getNativeBeforeInputChars(topLevelType, nativeEvent) {
   switch (topLevelType) {
     case TOP_COMPOSITION_END:
       return getDataFromCustomEvent(nativeEvent);
     case TOP_KEY_PRESS:
+      //  如果原生的textInput事件可用，我们的目标是充分利用他们。但是这里有特殊情况：
+      //  那就是空格键，在webkit中，要避免空格键的textInput事件取消字符的插入的moren
+      //  行为，但是这有触发了浏览器滚动页面的默认行为，为了避免这个问题，我们
+      //  使用只有在没有可用的textInput事件时才会使用摁键事件
+  
       /**
        * If native `textInput` events are available, our goal is to make
        * use of them. However, there is a special case: the spacebar key.
