@@ -2434,9 +2434,13 @@ function getNativeBeforeInputChars(topLevelType, nativeEvent) {
       return SPACEBAR_CHAR;
 
     case TOP_TEXT_INPUT:
+      //  记录添加到DOM中的字符
       // Record the characters to be added to the DOM.
       var chars = nativeEvent.data;
 
+      //  如果是空格键，假定我们已经在摁键阶段处理并且立即释放了事件，安卓下的
+      //  chrome并没有给我们键码，所以我们需要忽略它
+  
       // If it's a spacebar character, assume that we have already handled
       // it at the keypress level and bail immediately. Android Chrome
       // doesn't give us keycodes, so we need to ignore it.
@@ -2447,11 +2451,14 @@ function getNativeBeforeInputChars(topLevelType, nativeEvent) {
       return chars;
 
     default:
+      //  对于其他的原生事件类型，啥也不做
+
       // For other native event types, do nothing.
       return null;
   }
 }
 
+//  针对不支持textInput事件的浏览器，这里提取合适的字符串提供给合成的输入事件
 /**
  * For browsers that do not provide the `textInput` event, extract the
  * appropriate string to use for SyntheticInputEvent.
@@ -2461,12 +2468,17 @@ function getNativeBeforeInputChars(topLevelType, nativeEvent) {
  * @return {?string} The fallback string for this `beforeInput` event.
  */
 function getFallbackBeforeInputChars(topLevelType, nativeEvent) {
+  //  如果我们正在构造输入法编辑器并在使用兜底，尝试从兜底对象中提取构造的
+  //  字符串。如果构造事件可用，我们就只在合成事件中提取字符串，否则的话从
+  //  兜底对象中提取
+
   // If we are currently composing (IME) and using a fallback to do so,
   // try to extract the composed characters from the fallback object.
   // If composition event is available, we extract a string only at
   // compositionevent, otherwise extract it at fallback events.
   if (isComposing) {
     if (topLevelType === TOP_COMPOSITION_END || !canUseCompositionEvent && isFallbackCompositionEnd(topLevelType, nativeEvent)) {
+      //  获取输入的字符
       var chars = getData();
       reset();
       isComposing = false;
@@ -2477,10 +2489,22 @@ function getFallbackBeforeInputChars(topLevelType, nativeEvent) {
 
   switch (topLevelType) {
     case TOP_PASTE:
+      //  如果在摁键后发生了粘贴事件，抛出出入字符串。粘贴事件不应该引导
+      //  BeforeInput事件
+
       // If a paste event occurs after a keypress, throw out the input
       // chars. Paste events should not lead to BeforeInput events.
       return null;
     case TOP_KEY_PRESS:
+      //  针对v27版本，fireFox浏览器会在没有字符插入时触发摁键事件，有以下几种可能性
+      //  如果which是0，可能是箭头键，esc键等等
+
+      //  如果which是摁键键码，但是并没有可用的字符，比如altGr + d在波兰语中
+      //  ,这种情况下没有支持的字符针对这种键的组合并且没有字符插入到文档中，在这种情况下
+      //  火狐浏览器还是会触发键码为100的摁键事件，此时并没有input事件发生
+
+      //  如果which是摁键键码，但是实在使用组合组合命令键，例如cmd+c,测试没有字符被插入，也
+      //  不会有input事件触发
       /**
        * As of v27, Firefox may fire keypress events even when no character
        * will be inserted. A few possibilities:
@@ -2499,6 +2523,10 @@ function getFallbackBeforeInputChars(topLevelType, nativeEvent) {
        */
       //  判断是否是摁键指令
       if (!isKeypressCommand(nativeEvent)) {
+        //  IE浏览器在windows下由触摸键盘输入表情，在这种情况下，表情符号的char属性
+        //  可能类似于\uD83D\uDE0A，因为其长度为2，此时的which并不直接代表表情，
+        //  此时我们直接返回char属性而不是which
+
         // IE fires the `keypress` event when a user types an emoji via
         // Touch keyboard of Windows.  In such a case, the `char` property
         // holds an emoji character like `\uD83D\uDE0A`.  Because its length
