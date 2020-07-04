@@ -958,6 +958,7 @@ function isInteractive(tag) {
 }
 
 //  是否阻断鼠标事件
+//  是否避免事件鼠标行为
 function shouldPreventMouseEvent(name, type, props) {
   switch (name) {
     case 'onClick':
@@ -970,6 +971,7 @@ function shouldPreventMouseEvent(name, type, props) {
     case 'onMouseMoveCapture':
     case 'onMouseUp':
     case 'onMouseUpCapture':
+      //  如果不是可交互的元素
       return !!(props.disabled && isInteractive(type));
     default:
       return false;
@@ -979,6 +981,12 @@ function shouldPreventMouseEvent(name, type, props) {
 //  提取事件，当事件被触发的时候，这个方法将会入队并且被触发
 //  事件类型，可选，每个触发事件的插件必须发布一个映射以便等价监听器，映射的值必须有registrationName和phasedRegistrationNames两个参数
 //  执行分发，重写监听器函数
+
+//  这是一个为事件插件的整合的接口，方便插件的安装和配置
+//  事件的插件通过以下属性来实现
+
+//  extractEvents提取事件，必须，当顶级事件被触发的时候，这个方法将同步提取事件
+//  这些事件将会入队并且分发
 /**
  * This is a unified interface for event plugins to be installed and configured.
  *
