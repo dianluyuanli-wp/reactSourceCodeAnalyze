@@ -2587,6 +2587,17 @@ function extractBeforeInputEvent(topLevelType, targetInst, nativeEvent, nativeEv
   return event;
 }
 
+//  创建一个onBeforeInput来匹配
+//  这个时间插件在chrome,safari,opera,和IE等浏览器中是通过原生
+//  textInput时间来实现的，这个时间在onKeyPress，onCompositionEnd
+//  发生之后触发，onInput在onInput时间触发之前发生
+
+//  beforeInput是spec'd但是并没有在任何浏览器中实现，并且input时间并没有提供
+//  任何关于真正被添加的字符的信息，与规范相悖。因此textInput是最好的
+//  能够用来识别我们实际输出到目标节点的事件
+
+//  这个插件负责触发合成事件，因此允许我们分享合成事件的兜底代码来
+//  处理beforeInput和composition类型的事件
 /**
  * Create an `onBeforeInput` event to match
  * http://www.w3.org/TR/2013/WD-DOM-Level-3-Events-20131105/#events-inputevents.
@@ -2605,6 +2616,8 @@ function extractBeforeInputEvent(topLevelType, targetInst, nativeEvent, nativeEv
  * allowing us to share composition fallback code for both `beforeInput` and
  * `composition` event types.
  */
+
+ // 
 var BeforeInputEventPlugin = {
   eventTypes: eventTypes,
 
@@ -2625,6 +2638,7 @@ var BeforeInputEventPlugin = {
   }
 };
 
+//  以下这些用来在改变事件触发之后储存状态
 // Use to restore controlled state after a change event has fired.
 
 var restoreImpl = null;
@@ -2632,6 +2646,8 @@ var restoreTarget = null;
 var restoreQueue = null;
 
 function restoreStateOfTarget(target) {
+  //  我们在时间循环的最后进行状态的改变，使得我们总是能够收到正确的fiber
+  
   // We perform this translation at the end of the event loop so that we
   // always receive the correct fiber here
   var internalInstance = getInstanceFromNode(target);
