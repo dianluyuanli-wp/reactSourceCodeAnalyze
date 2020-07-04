@@ -439,13 +439,13 @@ function clearCaughtError() {
   }
 }
 
-//  事件插件的可注入顺序
+//  事件插件的顺序列表（可注入的）
 /**
  * Injectable ordering of event plugins.
  */
 var eventPluginOrder = null;
 
-//  从名字到事件插件模块的可注入映射
+//  从名字到事件插件模块的映射
 /**
  * Injectable mapping from names to event plugin modules.
  */
@@ -457,6 +457,10 @@ var namesToPlugins = {};
  *
  * @private
  */
+
+//  这里的eventPluginOrder其实就是DOMEventPluginOrder，是一个字符串数组，里面有
+//  插件的名字
+//  将eventPluginOrder中的插件同序号复制到plugins，并且发布事件
 //  重新计算插件顺序
 function recomputePluginOrdering() {
   if (!eventPluginOrder) {
@@ -476,7 +480,7 @@ function recomputePluginOrdering() {
       continue;
     }
     //  校验是否存在extractEvent方法
-    //  EventPluginRegistry: 时间插件必须实现extractEvents方法，但是xxx插件没有
+    //  EventPluginRegistry: 事件插件必须实现extractEvents方法，但是xxx插件没有
     !pluginModule.extractEvents ? invariant(false, 'EventPluginRegistry: Event plugins must implement an `extractEvents` method, but `%s` does not.', pluginName) : void 0;
     //  给插件数组注册模块，其顺序跟eventPluginOrder一致
     plugins[pluginIndex] = pluginModule;
@@ -594,7 +598,7 @@ var registrationNameModules = {};
 //  把登记名和事件名映射
 var registrationNameDependencies = {};
 
-//  将小写的登记名映射到合适的版本，过去用来在确实时间处理句柄时报错用
+//  将小写的登记名映射到合适的版本，过去用来在缺少事件处理句柄时报错用
 //  只有在true时可用
 /**
  * Mapping from lowercase registration names to the properly cased version,
@@ -1010,6 +1014,7 @@ function shouldPreventMouseEvent(name, type, props) {
  * @public
  */
 
+ // 注入依赖的方法
 /**
  * Methods for injecting dependencies.
  */
@@ -1031,16 +1036,22 @@ var injection = {
  * @param {string} registrationName Name of listener (e.g. `onClick`).
  * @return {?function} The stored callback.
  */
+//  获取监听器
 function getListener(inst, registrationName) {
   var listener = void 0;
+
+  //  TODO: shouldPreventMouseEvent是一个针对特殊DOM的方法，完全不应该
+  //  出现在这里，应该被移到别的地方
 
   // TODO: shouldPreventMouseEvent is DOM-specific and definitely should not
   // live here; needs to be moved to a better place soon
   var stateNode = inst.stateNode;
   if (!stateNode) {
+    //  正在进行中（例如onload事件在增量模式中）
     // Work in progress (ex: onload events in incremental mode).
     return null;
   }
+  //  获取当前节点的属性
   var props = getFiberCurrentPropsFromNode(stateNode);
   if (!props) {
     // Work in progress.
@@ -1052,10 +1063,13 @@ function getListener(inst, registrationName) {
     return null;
   }
   //  判断是否要返回监听器
+
+  //  预想中的xxx监听器应该是个函数，但是获取到了一个xxx类型的值
   !(!listener || typeof listener === 'function') ? invariant(false, 'Expected `%s` listener to be a function, instead got a value of `%s` type.', registrationName, typeof listener) : void 0;
   return listener;
 }
 
+//  允许注册插件有机会从顶层原生浏览器事件中提取事件
 /**
  * Allows registered plugins an opportunity to extract events from top-level
  * native browser events.
@@ -1067,6 +1081,7 @@ function extractEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget)
   var events = null;
   //  遍历所有的插件，把提取到的事件都放在一起
   for (var i = 0; i < plugins.length; i++) {
+    //  并不是所有的排序插件在运行时都会被加载
     // Not every plugin in the ordering may be loaded at runtime.
     var possiblePlugin = plugins[i];
     if (possiblePlugin) {
@@ -1079,11 +1094,15 @@ function extractEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget)
   return events;
 }
 
-//  一次运行多个事件
+//  批量运行事件
 function runEventsInBatch(events) {
   if (events !== null) {
+    //  更新事件队列
     eventQueue = accumulateInto(eventQueue, events);
   }
+
+  //  在正式处理前设置事件队列为null，从而使得我们能够区分是否在处理的
+  //  过程中有更多事件入队
 
   // Set `eventQueue` to null before processing it so that we can tell if more
   // events get enqueued while processing.
@@ -1095,8 +1114,12 @@ function runEventsInBatch(events) {
   }
   //  遍历事件队列，执行并且释放
   forEachAccumulated(processingEventQueue, executeDispatchesAndReleaseTopLevel);
+  //  如果在执行过程中eventQueue有了新的成员，则报错
+  //  processEventQueue: 在处理事件队列的过程中有新的事件入队，
+  //  当下不支持这种功能
   !!eventQueue ? invariant(false, 'processEventQueue(): Additional events were enqueued while processing an event queue. Support for this has not yet been implemented.') : void 0;
   // This would be a good time to rethrow if any of the event handlers threw.
+  //  如果在事件处理的过程中有报错的话，这是一个重新抛错的好时机
   rethrowCaughtError();
 }
 //  一次跑提取出来的多个事件
@@ -1107,10 +1130,15 @@ function runExtractedEventsInBatch(topLevelType, targetInst, nativeEvent, native
 
 var FunctionComponent = 0;
 var ClassComponent = 1;
+//  在能够判断组件到底是函数组件或者类组件前，其定义为模糊组件
 var IndeterminateComponent = 2; // Before we know whether it is function or class
+//  组件树的根，能够内嵌到其他节点中
 var HostRoot = 3; // Root of a host tree. Could be nested inside another node.
+//  一棵子树，能够成为其他渲染器的入口
 var HostPortal = 4; // A subtree. Could be an entry point to a different renderer.
+//  主组件
 var HostComponent = 5;
+//  文案型根节点
 var HostText = 6;
 var Fragment = 7;
 var Mode = 8;
@@ -1129,7 +1157,7 @@ var randomKey = Math.random().toString(36).slice(2);
 var internalInstanceKey = '__reactInternalInstance$' + randomKey;
 var internalEventHandlersKey = '__reactEventHandlers$' + randomKey;
 
-//  预加载fiber node
+//  预缓存fiber node
 function precacheFiberNode(hostInst, node) {
   node[internalInstanceKey] = hostInst;
 }
@@ -1138,7 +1166,7 @@ function precacheFiberNode(hostInst, node) {
  * Given a DOM node, return the closest ReactDOMComponent or
  * ReactDOMTextComponent instance ancestor.
  */
-//  根据一个已知的dom节点，返回最近的节点的祖先
+//  根据一个已知的dom节点，返回最近的reactDom组件或者ReactDOMTextComponent实例的祖先
 function getClosestInstanceFromNode(node) {
   if (node[internalInstanceKey]) {
     return node[internalInstanceKey];
@@ -1149,6 +1177,7 @@ function getClosestInstanceFromNode(node) {
     if (node.parentNode) {
       node = node.parentNode;
     } else {
+      //  如果到了树顶，这个节点要么不是react 树的节点，要么没有加载
       // Top of the tree. This node must not be part of a React tree (or is
       // unmounted, potentially).
       return null;
@@ -1158,6 +1187,7 @@ function getClosestInstanceFromNode(node) {
   //  如果这个父节点的tag是固定的类型，返回
   var inst = node[internalInstanceKey];
   if (inst.tag === HostComponent || inst.tag === HostText) {
+    //  在Fiber中，这个永远是最深的根节点
     // In Fiber, this will always be the deepest root.
     return inst;
   }
@@ -1165,6 +1195,8 @@ function getClosestInstanceFromNode(node) {
   return null;
 }
 
+//  给一个DOM节点，返回ReactDOMComponent或者ReactDOMTextComponent的实例，
+//  如果这个组件根本没有被渲染的话返回null
 /**
  * Given a DOM node, return the ReactDOMComponent or ReactDOMTextComponent
  * instance, or null if the node was not rendered by this React.
@@ -1182,6 +1214,7 @@ function getInstanceFromNode$1(node) {
   return null;
 }
 
+//  根据ReactDOMComponent或者ReactDOMTextComponent，返回与之对应的DOM节点
 /**
  * Given a ReactDOMComponent or ReactDOMTextComponent, return the corresponding
  * DOM node.
@@ -1189,20 +1222,24 @@ function getInstanceFromNode$1(node) {
 //  根据节点（react）返回dom节点
 function getNodeFromInstance$1(inst) {
   if (inst.tag === HostComponent || inst.tag === HostText) {
+    //  在fiber中，这个目前还是状态节点，我们假设它将会变成hose组件或者hose文案
     // In Fiber this, is just the state node right now. We assume it will be
     // a host component or host text.
     return inst.stateNode;
   }
 
+  //  如果没有这个报错的话，传递一个非Dom组价将会触发没有父组件的报错，这很令人疑惑
   // Without this first invariant, passing a non-DOM-component triggers the next
   // invariant for a missing parent, which is super confusing.
   invariant(false, 'getNodeFromInstance: Invalid argument.');
 }
 
+//  从节点中获取当前的fiber属性
 function getFiberCurrentPropsFromNode$1(node) {
   return node[internalEventHandlersKey] || null;
 }
 
+//  更新fiber属性
 function updateFiberProps(node, props) {
   node[internalEventHandlersKey] = props;
 }
@@ -1211,6 +1248,10 @@ function updateFiberProps(node, props) {
 function getParent(inst) {
   do {
     inst = inst.return;
+    //  如果这个跟节点，我们就要退出
+    //  这取决于我们是否想要嵌套子树将事件冒泡到他们的父组件。我们也会
+    //  遍历父主节点节点但是这在reactNative上无效，使得我们无法使用
+    //  portal特性
     // TODO: If this is a HostRoot we might want to bail out.
     // That is depending on if we want nested subtrees (layers) to bubble
     // events to their parent. We could also go through parentNode on the
@@ -1227,7 +1268,7 @@ function getParent(inst) {
  * Return the lowest common ancestor of A and B, or null if they are in
  * different trees.
  */
-//  返回两个react实例的最近的祖先元素
+//  返回两个react实例的最近的共同祖先元素，如果是不同树上的节点，返回null
 function getLowestCommonAncestor(instA, instB) {
   //  获取两个节点的深度
   var depthA = 0;
@@ -1256,9 +1297,11 @@ function getLowestCommonAncestor(instA, instB) {
   // Walk in lockstep until we find a match.
   var depth = depthA;
   while (depth--) {
+    //  实例a等于实例b或者b的代理时，返回
     if (instA === instB || instA === instB.alternate) {
       return instA;
     }
+    //  否则上溯
     instA = getParent(instA);
     instB = getParent(instB);
   }
@@ -1305,8 +1348,11 @@ function traverseTwoPhase(inst, fn, arg) {
  * "entered" or "left" that element.
  */
 //  遍历id层级，并且在任何需要接收mouseEnter和mouseLeave的id上调用回调函数
+//  在最近的共同祖先上并不需要调用回调因为节点本身没有进入或者离开
 function traverseEnterLeave(from, to, fn, argFrom, argTo) {
+  //  获取共同的父节点
   var common = from && to ? getLowestCommonAncestor(from, to) : null;
+  //  从from节点到公共节点的节点数组
   var pathFrom = [];
   while (true) {
     if (!from) {
@@ -1315,6 +1361,7 @@ function traverseEnterLeave(from, to, fn, argFrom, argTo) {
     if (from === common) {
       break;
     }
+    //  判断代理节点
     var alternate = from.alternate;
     if (alternate !== null && alternate === common) {
       break;
@@ -1347,15 +1394,21 @@ function traverseEnterLeave(from, to, fn, argFrom, argTo) {
   }
 }
 
+//  一些事件类型在事件传播的不同阶段有不同的登记名，这个方法返回特定状态
+//  的监听器
 /**
  * Some event types have a notion of different registration names for different
  * "phases" of propagation. This finds listeners by a given phase.
  */
-//  部分事件类型在事件传播的不同阶段有不同的登记名，这个方法通过已知态寻找监听器
 function listenerAtPhase(inst, event, propagationPhase) {
   var registrationName = event.dispatchConfig.phasedRegistrationNames[propagationPhase];
   return getListener(inst, registrationName);
 }
+
+//  一个小的传播模式集合，其中的每一个都会接收少量信息，并且产生一个`已经分发号的时间对象`
+//  的集合，该事件集合中的每一个元素都已经被标记了已经分发了监听器的函数或者id.aip这样
+//  设计是为了避免这些传播策略事实上执行了事件分发，因此我们总是收集整个分发事件的集合
+//  尽管事实上只执行单个事件
 
 /**
  * A small set of propagation patterns, each of which will accept a small amount
@@ -1367,6 +1420,9 @@ function listenerAtPhase(inst, event, propagationPhase) {
  * single one.
  */
 
+//  给分发的监听器打上’合成事件‘的标。在这里创建这个函数，使得我们不必绑定或者为每个
+//  事件创建函数。改变事件成员数目使得我们不必创建一个包裹分发对象与事件监听器配对
+
 /**
  * Tags a `SyntheticEvent` with dispatched listeners. Creating this function
  * here, allows us to not have to bind or create functions for each event.
@@ -1377,8 +1433,10 @@ function listenerAtPhase(inst, event, propagationPhase) {
 //  phase针对的是状态，具体来说可以是bubble或者catch
 function accumulateDirectionalDispatches(inst, phase, event) {
   {
+    //  分发的实例不能为null
     !inst ? warningWithoutStack$1(false, 'Dispatching inst must not be null') : void 0;
   }
+  //  获取该阶段的监听器
   var listener = listenerAtPhase(inst, event, phase);
   if (listener) {
     //  监听器聚合和实例聚合
@@ -1387,6 +1445,9 @@ function accumulateDirectionalDispatches(inst, phase, event) {
   }
 }
 
+//  收集分发（在分发之前必须整体收集，见单元测试）。懒分配数组以便保存内存。我们必须
+//  循环遍历每一个事件。我们无法遍历整个事件集合中的每一个元素，因为每个事件都有不同
+//  的目标
 /**
  * Collect dispatches (must be entirely collected before dispatching - see unit
  * tests). Lazily allocate the array to conserve memory.  We must loop through
@@ -1397,10 +1458,13 @@ function accumulateDirectionalDispatches(inst, phase, event) {
 //  在分发前要对事件进行收集，懒分配数组一遍保存内存，必须循环事件并且遍历每一个
 function accumulateTwoPhaseDispatchesSingle(event) {
   if (event && event.dispatchConfig.phasedRegistrationNames) {
+    //  这里的two phase指的是事件冒泡和捕获两种状态
     traverseTwoPhase(event._targetInst, accumulateDirectionalDispatches, event);
   }
 }
 
+//  不考虑方向的合并，并不查找当前状态的登记名。跟accumulateDirectDispatchesSingle
+//  一样但是并不需要dispatchMarker和分发id保持一致
 /**
  * Accumulates without regard to direction, does not look for phased
  * registration names. Same as `accumulateDirectDispatchesSingle` but without
@@ -1418,12 +1482,12 @@ function accumulateDispatches(inst, ignoredDirection, event) {
   }
 }
 
+//  在合成事件上聚合分发，但是仅仅针对dispatchMarker
 /**
  * Accumulates dispatches on an `SyntheticEvent`, but only for the
  * `dispatchMarker`.
  * @param {SyntheticEvent} event
  */
-//  通过事件来调用聚合分发
 function accumulateDirectDispatchesSingle(event) {
   if (event && event.dispatchConfig.registrationName) {
     accumulateDispatches(event._targetInst, null, event);
@@ -1441,16 +1505,19 @@ function accumulateEnterLeaveDispatches(leave, enter, from, to) {
 }
 
 //  聚合直接分发事件，只在当前节点触发，入参是数组，只是简单的遍历
+//  这个不区分是冒泡还是捕获
 function accumulateDirectDispatches(events) {
   forEachAccumulated(events, accumulateDirectDispatchesSingle);
 }
 
+//  是否能够使用dom相关api
 var canUseDOM = !!(typeof window !== 'undefined' && window.document && window.document.createElement);
 
 // Do not uses the below two methods directly!
 // Instead use constants exported from DOMTopLevelEventTypes in ReactDOM.
 // (It is the only module that is allowed to access these methods.)
-//  永远不要使用这些方法
+//  永远不要直接使用这些方法
+//  作为替代，使用ReactDOM中的DOMTopLevelEventTypes来获取
 function unsafeCastStringToDOMTopLevelType(topLevelType) {
   return topLevelType;
 }
@@ -1459,6 +1526,7 @@ function unsafeCastDOMTopLevelTypeToString(topLevelType) {
   return topLevelType;
 }
 
+//  建立浏览器厂商前缀和样式属性与事件名之间的映射
 /**
  * Generate a mapping of standard vendor prefixes using the defined style property and event name.
  *
@@ -1466,7 +1534,6 @@ function unsafeCastDOMTopLevelTypeToString(topLevelType) {
  * @param {string} eventName
  * @returns {object}
  */
-//  创建前缀的映射关系
 function makePrefixMap(styleProp, eventName) {
   var prefixes = {};
 
@@ -1489,13 +1556,13 @@ var vendorPrefixes = {
   transitionend: makePrefixMap('Transition', 'TransitionEnd')
 };
 
+//  已经被标记且添加前缀的事件名（如果可用）
 /**
  * Event names that have already been detected and prefixed (if applicable).
  */
-
- // 已经处理过的事件名
 var prefixedEventNames = {};
 
+//  判断前缀的元素
 /**
  * Element to check for prefixes on.
  */
@@ -1507,6 +1574,10 @@ var style = {};
 //  dom存在时的引导程序
 if (canUseDOM) {
   style = document.createElement('div').style;
+
+  //  在一些平台上，比如某些版本的安卓4.x系统，animation和transition属性
+  //  在style对象上是没有前缀的，但是被触发时，这些事件名将会有前缀，所以
+  //  我们需要检查非前缀的事件是否可用，如果不是的话将其移除
 
   // On some platforms, in particular some releases of Android 4.x,
   // the un-prefixed "animation" and "transition" properties are defined on the
@@ -1553,6 +1624,9 @@ function getVendorPrefixedEventName(eventName) {
 
   return eventName;
 }
+
+//  为了识别ReactDom中的顶级事件，我们使用常数去定义这些模块。这是唯一使用unsafeX 方法
+//  去获取真实的浏览器事件的常数。这使得我们通过避免顶层事件到事件名的映射从而节省了一些打包大小
 
 /**
  * To identify top level events in ReactDOM, we use constants defined by this
@@ -1645,6 +1719,10 @@ var TOP_VOLUME_CHANGE = unsafeCastStringToDOMTopLevelType('volumechange');
 var TOP_WAITING = unsafeCastStringToDOMTopLevelType('waiting');
 var TOP_WHEEL = unsafeCastStringToDOMTopLevelType('wheel');
 
+//  单独需要被绑定到媒体元素上的事件的列表
+//  注意这个列表里的事件并不会被的顶层监听，除非他们在ReactBrowserEventEmitter.listenTo
+//  这个白名单上
+
 // List of events that need to be individually attached to media elements.
 // Note that events in this list will *not* be listened to at the top level
 // unless they're explicitly whitelisted in `ReactBrowserEventEmitter.listenTo`.
@@ -1655,6 +1733,11 @@ var mediaEventTypes = [TOP_ABORT, TOP_CAN_PLAY, TOP_CAN_PLAY_THROUGH, TOP_DURATI
 function getRawEventName(topLevelType) {
   return unsafeCastDOMTopLevelTypeToString(topLevelType);
 }
+
+//  这些变量存储了目标节点上的文字内容，使得能够比较赋值之前和之后的内容。
+//  识别当前选中态开始的节点位置，之后观察其内部的文字内容和在dom中的位置
+//  .因为浏览器会原生地在比较过程中替换原生节点，我们可以利用这个位置去找到
+//  这个替换
 
 /**
  * These variables store information about text content of a target node,
@@ -1672,18 +1755,22 @@ var root = null;
 var startText = null;
 var fallbackText = null;
 
+//  初始化startText
 function initialize(nativeEventTarget) {
   root = nativeEventTarget;
+  //  最开始文案
   startText = getText();
   return true;
 }
 
+//  重置
 function reset() {
   root = null;
   startText = null;
   fallbackText = null;
 }
 
+//  获得兜底文字
 function getData() {
   if (fallbackText) {
     return fallbackText;
@@ -1696,12 +1783,14 @@ function getData() {
   var endValue = getText();
   var endLength = endValue.length;
 
+  //  从0到某个位置字符是一样的
   for (start = 0; start < startLength; start++) {
     if (startValue[start] !== endValue[start]) {
       break;
     }
   }
 
+  //  倒数，从具体某个位置字符是一样的
   var minEnd = startLength - start;
   for (end = 1; end <= minEnd; end++) {
     if (startValue[startLength - end] !== endValue[endLength - end]) {
@@ -1710,6 +1799,7 @@ function getData() {
   }
 
   var sliceTail = end > 1 ? 1 - end : undefined;
+  //  返回中间不一样的部分
   fallbackText = endValue.slice(start, sliceTail);
   return fallbackText;
 }
@@ -1725,6 +1815,7 @@ function getText() {
 
 var EVENT_POOL_SIZE = 10;
 
+//  根据w3的标准实现事件接口
 /**
  * @interface Event
  * @see http://www.w3.org/TR/DOM-Level-3-Events/
@@ -1733,10 +1824,12 @@ var EVENT_POOL_SIZE = 10;
 var EventInterface = {
   type: null,
   target: null,
+  //  currentTarget是在事件分发的时候被设置的，现在复制在这里没用
   // currentTarget is set when dispatching; no use in copying it here
   currentTarget: function () {
     return null;
   },
+  //  事件状态，捕获或者冒泡
   eventPhase: null,
   bubbles: null,
   cancelable: null,
@@ -1755,6 +1848,13 @@ function functionThatReturnsFalse() {
   return false;
 }
 
+//  合成事件是通过事件插件来分发的，通常是响应顶级事件委托处理程序。
+//  这些系统需要通过事件池来降低垃圾回收的频率。系统需要检查isPersistent
+//  来决定是否应该释放一个已经被分发的事件。用户需要一个持续性的事件
+//  来唤起persist
+
+//  合成事件（及其子类）的实现了DOM 等级3的api,这个过程中磨平了不同浏览器
+//  之间的差异，其子类不必一定要实现DOM接口，自定义特定于应用程序的事件也可以将其子类化。
 /**
  * Synthetic events are dispatched by event plugins, typically in response to a
  * top-level event delegation handler.
@@ -1773,9 +1873,11 @@ function functionThatReturnsFalse() {
  * @param {object} nativeEvent Native browser event.
  * @param {DOMEventTarget} nativeEventTarget Target node.
  */
-//  聚合事件是通过事件插件来分发的，特别是顶层的事件委托句柄
+
+ // 合成事件的构造函数
 function SyntheticEvent(dispatchConfig, targetInst, nativeEvent, nativeEventTarget) {
   {
+    //  这些事件的setter或getter会触发报错
     // these have a getter/setter for warnings
     delete this.nativeEvent;
     delete this.preventDefault;
@@ -1820,8 +1922,9 @@ function SyntheticEvent(dispatchConfig, targetInst, nativeEvent, nativeEventTarg
   return this;
 }
 
-//  对合成事件的原型进行assign
+//  对合成事件的原型进行assign，自己实现一套event API
 _assign(SyntheticEvent.prototype, {
+  //  屏蔽默认行为
   preventDefault: function () {
     this.defaultPrevented = true;
     var event = this.nativeEvent;
@@ -1835,9 +1938,11 @@ _assign(SyntheticEvent.prototype, {
     } else if (typeof event.returnValue !== 'unknown') {
       event.returnValue = false;
     }
+    //  isDefaultPrevented方法设置为返回true
     this.isDefaultPrevented = functionThatReturnsTrue;
   },
 
+  //  停止冒泡
   stopPropagation: function () {
     var event = this.nativeEvent;
     if (!event) {
@@ -1848,6 +1953,10 @@ _assign(SyntheticEvent.prototype, {
       event.stopPropagation();
       //  否则手动调用，赋值
     } else if (typeof event.cancelBubble !== 'unknown') {
+      //  ChangeEventPlugin这个插件为IE注册了注册了propertychange这个事件
+      //  这个事件不支持冒泡或者取消，并且任何cancelBubble的引用都会抛出错误
+      //  ,通过类型检查可以规避这个问题
+
       // The ChangeEventPlugin registers a "propertychange" event for
       // IE. This event does not support bubbling or cancelling, and
       // any references to cancelBubble throw "Member not found".  A
@@ -1859,6 +1968,8 @@ _assign(SyntheticEvent.prototype, {
     this.isPropagationStopped = functionThatReturnsTrue;
   },
 
+  //  我们在每个事件循环后将会释放所有的合成事件，并且把它们放回到事件池中，这
+  //  提供了一个能够获取那些不会被放回池子里的事件的引用的途径
   /**
    * We release all dispatched `SyntheticEvent`s after each event loop, adding
    * them back into the pool. This allows a way to hold onto a reference that
@@ -1868,6 +1979,7 @@ _assign(SyntheticEvent.prototype, {
     this.isPersistent = functionThatReturnsTrue;
   },
 
+  //  检查这个事件是否需要被释放回池子里
   /**
    * Checks if this event should be released back into the pool.
    *
@@ -1875,11 +1987,13 @@ _assign(SyntheticEvent.prototype, {
    */
   isPersistent: functionThatReturnsFalse,
 
+  //  事件池在每个事件被释放是都会运行destructor
   /**
    * `PooledClass` looks for `destructor` on each instance it releases.
    */
   destructor: function () {
     var Interface = this.constructor.Interface;
+    //  遍历interface中的每个属性
     for (var propName in Interface) {
       {
         //  获取聚合的警告属性的定义
@@ -1893,6 +2007,7 @@ _assign(SyntheticEvent.prototype, {
     this.isPropagationStopped = functionThatReturnsFalse;
     this._dispatchListeners = null;
     this._dispatchInstances = null;
+    //  以下这些属性页设置get和set warning
     {
       Object.defineProperty(this, 'nativeEvent', getPooledWarningPropertyDefinition('nativeEvent', null));
       Object.defineProperty(this, 'isDefaultPrevented', getPooledWarningPropertyDefinition('isDefaultPrevented', functionThatReturnsFalse));
@@ -1905,10 +2020,11 @@ _assign(SyntheticEvent.prototype, {
 
 SyntheticEvent.Interface = EventInterface;
 
+//  帮助在创建子类的时候减少样板文件引用
+//  提供扩展函数
 /**
  * Helper to reduce boilerplate when creating subclasses.
  */
-//  创造子类的时候减少引用,合成事件的扩展
 SyntheticEvent.extend = function (Interface) {
   var Super = this;
 
@@ -1916,6 +2032,7 @@ SyntheticEvent.extend = function (Interface) {
   E.prototype = Super.prototype;
   var prototype = new E();
 
+  //  一个工具类
   function Class() {
     return Super.apply(this, arguments);
   }
@@ -1925,6 +2042,7 @@ SyntheticEvent.extend = function (Interface) {
 
   Class.Interface = _assign({}, Super.Interface, Interface);
   Class.extend = Super.extend;
+  //  给这个类添加事件池
   addEventPoolingTo(Class);
 
   return Class;
@@ -1932,6 +2050,7 @@ SyntheticEvent.extend = function (Interface) {
 
 addEventPoolingTo(SyntheticEvent);
 
+//  在实例摧毁的时候帮助使合成事件作废
 /**
  * Helper to nullify syntheticEvent instance properties when destructing
  *
@@ -1939,9 +2058,9 @@ addEventPoolingTo(SyntheticEvent);
  * @param {?object} getVal
  * @return {object} defineProperty object
  */
-//  在摧毁的时候使合成事件无效化
 //  获取属性配置符的对象
 function getPooledWarningPropertyDefinition(propName, getVal) {
+  //  判断是设置属性值还是方法
   var isFunction = typeof getVal === 'function';
   return {
     configurable: true,
@@ -1968,12 +2087,13 @@ function getPooledWarningPropertyDefinition(propName, getVal) {
   }
 }
 
-//  获取合并的事件
+//  获取进入事件池的事件
 function getPooledEvent(dispatchConfig, targetInst, nativeEvent, nativeInst) {
   var EventConstructor = this;
   //  如果事件构造器的实例有，那么就调用并返回
   if (EventConstructor.eventPool.length) {
     var instance = EventConstructor.eventPool.pop();
+    //  调用构造函数
     EventConstructor.call(instance, dispatchConfig, targetInst, nativeEvent, nativeInst);
     return instance;
   }
@@ -1984,13 +2104,16 @@ function getPooledEvent(dispatchConfig, targetInst, nativeEvent, nativeInst) {
 //  释放聚合事件
 function releasePooledEvent(event) {
   var EventConstructor = this;
+  //  报错：尝试释放一个与事件池内事件类型不同的事件实例
   !(event instanceof EventConstructor) ? invariant(false, 'Trying to release an event instance into a pool of a different type.') : void 0;
   event.destructor();
+  //  小于上限就推一个事件进池子
   if (EventConstructor.eventPool.length < EVENT_POOL_SIZE) {
     EventConstructor.eventPool.push(event);
   }
 }
 
+//  给一个事件的构造器添加事件池子
 function addEventPoolingTo(EventConstructor) {
   EventConstructor.eventPool = [];
   EventConstructor.getPooled = getPooledEvent;
@@ -2001,7 +2124,7 @@ function addEventPoolingTo(EventConstructor) {
  * @interface Event
  * @see http://www.w3.org/TR/DOM-Level-3-Events/#events-compositionevents
  */
-//  合成的合成事件
+//  通过extend获得改造的合成事件
 var SyntheticCompositionEvent = SyntheticEvent.extend({
   data: null
 });
@@ -2016,6 +2139,7 @@ var SyntheticInputEvent = SyntheticEvent.extend({
   data: null
 });
 
+//  某些特殊的键值
 var END_KEYCODES = [9, 13, 27, 32]; // Tab, Return, Esc, Space
 var START_KEYCODE = 229;
 
@@ -2027,10 +2151,19 @@ if (canUseDOM && 'documentMode' in document) {
   documentMode = document.documentMode;
 }
 
+//  webkit提供了非常有用的`textInput`事件，能够用来直接表现`beforeInput`
+//  事件。IE浏览器的tetInput么有那么好用，这里放弃
+
+//  这里带一嘴，documentMode是IE浏览器的专属属性，可以用来判断浏览器内核
+//  https://www.runoob.com/jsref/prop-doc-documentmode.html
+
 // Webkit offers a very useful `textInput` event that can be used to
 // directly represent `beforeInput`. The IE `textinput` event is not as
 // useful, so we don't use it.
 var canUseTextInputEvent = canUseDOM && 'TextEvent' in window && !documentMode;
+
+//  在IE9+中，我们接触到合成事件，但是由原生合成事件提供的数据可能不正确。日文的
+//  ideographic空格不会被正确记录
 
 // In IE9+, we have access to composition events, but the data supplied
 // by the native compositionend event may be incorrect. Japanese ideographic
@@ -2044,6 +2177,7 @@ var SPACEBAR_CHAR = String.fromCharCode(SPACEBAR_CODE);
 //  事件和他们对应的属性名
 var eventTypes = {
   beforeInput: {
+    //  区分冒泡和捕获阶段的事件登记名
     phasedRegistrationNames: {
       bubbled: 'onBeforeInput',
       captured: 'onBeforeInputCapture'
@@ -2073,9 +2207,14 @@ var eventTypes = {
   }
 };
 
+//  追踪我们是否处理了空格键的摁下操作
+
 // Track whether we've ever handled a keypress on the space key.
 var hasSpaceKeypress = false;
 
+//  判断原生的摁键事件是否被作为一个命令，返回bool值。
+//  这是因为火狐浏览器触发摁键事件作为摁键命令（如复制粘贴，全选等），尽管
+//  此时并没有字符被插入
 /**
  * Return whether a native keypress event is assumed to be a command.
  * This is required because Firefox fires `keypress` events for key commands
@@ -2084,10 +2223,14 @@ var hasSpaceKeypress = false;
 //  判断是否是真实地摁键事件而不是操作指令
 function isKeypressCommand(nativeEvent) {
   return (nativeEvent.ctrlKey || nativeEvent.altKey || nativeEvent.metaKey) &&
+  //  ctrl+alt等于右alt,这个并不是命令
+  //  解释下啥是AltGr https://zhidao.baidu.com/question/1277950.html
+
   // ctrlKey && altKey is equivalent to AltGr, and is not a command.
   !(nativeEvent.ctrlKey && nativeEvent.altKey);
 }
 
+//  将顶层事件转化为事件类型
 /**
  * Translate native top level events into event types.
  *
@@ -2114,11 +2257,12 @@ function getCompositionEventType(topLevelType) {
  * @param {object} nativeEvent
  * @return {boolean}
  */
-//  我们的回调最佳猜测模型认为这个事件表示合成的开始么？
+//  我们的兜底最佳猜测模型认为这个事件表示合成的开始么？
 function isFallbackCompositionStart(topLevelType, nativeEvent) {
   return topLevelType === TOP_KEY_DOWN && nativeEvent.keyCode === START_KEYCODE;
 }
 
+//  我们的兜底模式是否认为这个事件是合成的结尾
 /**
  * Does our fallback mode think that this event is the end of composition?
  *
@@ -2129,21 +2273,30 @@ function isFallbackCompositionStart(topLevelType, nativeEvent) {
 function isFallbackCompositionEnd(topLevelType, nativeEvent) {
   switch (topLevelType) {
     case TOP_KEY_UP:
+      //  指令键插入或者清空输入法编辑器
       // Command keys insert or clear IME input.
       return END_KEYCODES.indexOf(nativeEvent.keyCode) !== -1;
     case TOP_KEY_DOWN:
+      //  在每个键摁下后期望获得输入法编辑器的键码，如果获得了其他键码
+      //  我们就应该早点退出
+
       // Expect IME keyCode on each keydown. If we get any other
       // code we must have exited earlier.
       return nativeEvent.keyCode !== START_KEYCODE;
     case TOP_KEY_PRESS:
     case TOP_MOUSE_DOWN:
     case TOP_BLUR:
+      //  事件不可能在没有唤起输入法编辑器的情况下发生
       // Events are not possible without cancelling IME.
       return true;
     default:
       return false;
   }
 }
+
+//  谷歌输入工具通过自定义事件提供了合成的数据，其在detail对象的data属性中
+//  如果这个属性在事件对象上可用，就用。如果不行，这就是一个空白的合成事件，
+//  我们并没有什么东西好提取
 
 /**
  * Google Input Tools provides composition data via a CustomEvent,
@@ -2154,7 +2307,6 @@ function isFallbackCompositionEnd(topLevelType, nativeEvent) {
  * @param {object} nativeEvent
  * @return {?string}
  */
-//  谷歌输入工具通过cust事件提供了一个合成数据
 function getDataFromCustomEvent(nativeEvent) {
   var detail = nativeEvent.detail;
   if (typeof detail === 'object' && 'data' in detail) {
@@ -2163,6 +2315,10 @@ function getDataFromCustomEvent(nativeEvent) {
   return null;
 }
 
+//  检查合成事件是否由韩语输入法编辑器触发，我们的兜底模式在韩国
+//  的IE浏览器输入法下工作的不太好。所以如果使用了韩语输入法编辑器
+//  我们就是用原生的合成事件。尽管CompositionEvent.locale这个属性
+//  被废弃了，但是它在ie中依然可用，此时我们启用了兜底模式
 /**
  * Check if a composition event was triggered by Korean IME.
  * Our fallback mode does not work well with IE's Korean IME,
@@ -2178,6 +2334,7 @@ function isUsingKoreanIME(nativeEvent) {
   return nativeEvent.locale === 'ko';
 }
 
+//  追踪当前输入法编辑器合成事件状态
 // Track the current IME composition status, if any.
 var isComposing = false;
 
@@ -2189,11 +2346,12 @@ function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEv
   var eventType = void 0;
   var fallbackData = void 0;
 
-  //  如果是合成事件，世界反悔合成事件类型
+  //  如果能够合成事件，返回合成事件类型
   if (canUseCompositionEvent) {
     eventType = getCompositionEventType(topLevelType);
-    //  如果正在合成，那么就返回合成事件的开始类型
+    //  如果不在合成，那么就返回合成事件的开始类型
   } else if (!isComposing) {
+    //  如果是兜底的合成开始
     if (isFallbackCompositionStart(topLevelType, nativeEvent)) {
       eventType = eventTypes.compositionStart;
     }
@@ -2209,6 +2367,7 @@ function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEv
 
   //  如果可以使用回调的组合事件
   if (useFallbackCompositionData && !isUsingKoreanIME(nativeEvent)) {
+    //  当前的合成是被静态存储的，在合成的过程中不允许被重写
     // The current composition is stored statically and must not be
     // overwritten while composition continues.
     if (!isComposing && eventType === eventTypes.compositionStart) {
@@ -2222,6 +2381,7 @@ function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEv
     }
   }
 
+  //  获得进入事件池的事件
   var event = SyntheticCompositionEvent.getPooled(eventType, targetInst, nativeEvent, nativeEventTarget);
 
   //  如果有回调数据，就赋值到事件上
@@ -2230,7 +2390,7 @@ function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEv
     // This matches the property of native CompositionEventInterface.
     event.data = fallbackData;
   } else {
-    //  使用通用事件的数据
+    //  使用自定义事件的数据
     var customData = getDataFromCustomEvent(nativeEvent);
     if (customData !== null) {
       event.data = customData;
@@ -2247,12 +2407,17 @@ function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEv
  * @param {object} nativeEvent Native browser event.
  * @return {?string} The string corresponding to this `beforeInput` event.
  */
-//  获取输入的键
+//  获取原生BeforeInput的键
 function getNativeBeforeInputChars(topLevelType, nativeEvent) {
   switch (topLevelType) {
     case TOP_COMPOSITION_END:
       return getDataFromCustomEvent(nativeEvent);
     case TOP_KEY_PRESS:
+      //  如果原生的textInput事件可用，我们的目标是充分利用他们。但是这里有特殊情况：
+      //  那就是空格键，在webkit中，要避免空格键的textInput事件取消字符的插入的moren
+      //  行为，但是这有触发了浏览器滚动页面的默认行为，为了避免这个问题，我们
+      //  使用只有在没有可用的textInput事件时才会使用摁键事件
+  
       /**
        * If native `textInput` events are available, our goal is to make
        * use of them. However, there is a special case: the spacebar key.
@@ -2277,9 +2442,13 @@ function getNativeBeforeInputChars(topLevelType, nativeEvent) {
       return SPACEBAR_CHAR;
 
     case TOP_TEXT_INPUT:
+      //  记录添加到DOM中的字符
       // Record the characters to be added to the DOM.
       var chars = nativeEvent.data;
 
+      //  如果是空格键，假定我们已经在摁键阶段处理并且立即释放了事件，安卓下的
+      //  chrome并没有给我们键码，所以我们需要忽略它
+  
       // If it's a spacebar character, assume that we have already handled
       // it at the keypress level and bail immediately. Android Chrome
       // doesn't give us keycodes, so we need to ignore it.
@@ -2290,11 +2459,14 @@ function getNativeBeforeInputChars(topLevelType, nativeEvent) {
       return chars;
 
     default:
+      //  对于其他的原生事件类型，啥也不做
+
       // For other native event types, do nothing.
       return null;
   }
 }
 
+//  针对不支持textInput事件的浏览器，这里提取合适的字符串提供给合成的输入事件
 /**
  * For browsers that do not provide the `textInput` event, extract the
  * appropriate string to use for SyntheticInputEvent.
@@ -2304,12 +2476,17 @@ function getNativeBeforeInputChars(topLevelType, nativeEvent) {
  * @return {?string} The fallback string for this `beforeInput` event.
  */
 function getFallbackBeforeInputChars(topLevelType, nativeEvent) {
+  //  如果我们正在构造输入法编辑器并在使用兜底，尝试从兜底对象中提取构造的
+  //  字符串。如果构造事件可用，我们就只在合成事件中提取字符串，否则的话从
+  //  兜底对象中提取
+
   // If we are currently composing (IME) and using a fallback to do so,
   // try to extract the composed characters from the fallback object.
   // If composition event is available, we extract a string only at
   // compositionevent, otherwise extract it at fallback events.
   if (isComposing) {
     if (topLevelType === TOP_COMPOSITION_END || !canUseCompositionEvent && isFallbackCompositionEnd(topLevelType, nativeEvent)) {
+      //  获取输入的字符
       var chars = getData();
       reset();
       isComposing = false;
@@ -2320,10 +2497,22 @@ function getFallbackBeforeInputChars(topLevelType, nativeEvent) {
 
   switch (topLevelType) {
     case TOP_PASTE:
+      //  如果在摁键后发生了粘贴事件，抛出出入字符串。粘贴事件不应该引导
+      //  BeforeInput事件
+
       // If a paste event occurs after a keypress, throw out the input
       // chars. Paste events should not lead to BeforeInput events.
       return null;
     case TOP_KEY_PRESS:
+      //  针对v27版本，fireFox浏览器会在没有字符插入时触发摁键事件，有以下几种可能性
+      //  如果which是0，可能是箭头键，esc键等等
+
+      //  如果which是摁键键码，但是并没有可用的字符，比如altGr + d在波兰语中
+      //  ,这种情况下没有支持的字符针对这种键的组合并且没有字符插入到文档中，在这种情况下
+      //  火狐浏览器还是会触发键码为100的摁键事件，此时并没有input事件发生
+
+      //  如果which是摁键键码，但是实在使用组合组合命令键，例如cmd+c,测试没有字符被插入，也
+      //  不会有input事件触发
       /**
        * As of v27, Firefox may fire keypress events even when no character
        * will be inserted. A few possibilities:
@@ -2342,6 +2531,10 @@ function getFallbackBeforeInputChars(topLevelType, nativeEvent) {
        */
       //  判断是否是摁键指令
       if (!isKeypressCommand(nativeEvent)) {
+        //  IE浏览器在windows下由触摸键盘输入表情，在这种情况下，表情符号的char属性
+        //  可能类似于\uD83D\uDE0A，因为其长度为2，此时的which并不直接代表表情，
+        //  此时我们直接返回char属性而不是which
+
         // IE fires the `keypress` event when a user types an emoji via
         // Touch keyboard of Windows.  In such a case, the `char` property
         // holds an emoji character like `\uD83D\uDE0A`.  Because its length
