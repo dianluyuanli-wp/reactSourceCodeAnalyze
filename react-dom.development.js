@@ -2646,7 +2646,7 @@ var restoreTarget = null;
 var restoreQueue = null;
 
 function restoreStateOfTarget(target) {
-  //  我们在时间循环的最后进行状态的改变，使得我们总是能够收到正确的fiber
+  //  我们在事件循环的最后进行状态的改变，使得我们总是能够收到正确的fiber
   
   // We perform this translation at the end of the event loop so that we
   // always receive the correct fiber here
@@ -2655,15 +2655,19 @@ function restoreStateOfTarget(target) {
     // Unmounted
     return;
   }
+  //  如果restoreImpl不是函数，告警：setRestoreImplementation需要在受控事件上被调用，这个错误
+  //  可能是react内部bug，请提issue
   !(typeof restoreImpl === 'function') ? invariant(false, 'setRestoreImplementation() needs to be called to handle a target for controlled events. This error is likely caused by a bug in React. Please file an issue.') : void 0;
   var props = getFiberCurrentPropsFromNode(internalInstance.stateNode);
   restoreImpl(internalInstance.stateNode, internalInstance.type, props);
 }
 
+//  设置restoreImpl的实现方法
 function setRestoreImplementation(impl) {
   restoreImpl = impl;
 }
 
+//  入队状态存储
 function enqueueStateRestore(target) {
   if (restoreTarget) {
     if (restoreQueue) {
@@ -2676,10 +2680,12 @@ function enqueueStateRestore(target) {
   }
 }
 
+//  是否需要状态存储
 function needsStateRestore() {
   return restoreTarget !== null || restoreQueue !== null;
 }
 
+//  如果需要的话，存储状态
 function restoreStateIfNeeded() {
   if (!restoreTarget) {
     return;
@@ -2689,6 +2695,7 @@ function restoreStateIfNeeded() {
   restoreTarget = null;
   restoreQueue = null;
 
+  //  restoreTarget和restoreQueue都存
   restoreStateOfTarget(target);
   if (queuedTargets) {
     for (var i = 0; i < queuedTargets.length; i++) {
@@ -2697,24 +2704,35 @@ function restoreStateIfNeeded() {
   }
 }
 
+//  当我们无法获取渲染器引用的时候，提供一个方法给我们调用批量更新
+//  例如当我们分发事件或者第三方库需要调用批量更新的时候。事实上，
+//  当所有的事件都被默认批量化的时候，这个api将会被剔除。然后我们将有一个类似
+//  的API来选择不执行计划的工作，而是执行同步工作。
+
 // Used as a way to call batchedUpdates when we don't have a reference to
 // the renderer. Such as when we're dispatching events or if third party
 // libraries need to call batchedUpdates. Eventually, this API will go away when
 // everything is batched by default. We'll then have a similar API to opt-out of
 // scheduled work and instead do synchronous work.
 
+//  默认行为
 // Defaults
+//  批量更新的实现
 var _batchedUpdatesImpl = function (fn, bookkeeping) {
   return fn(bookkeeping);
 };
+//  交互的更新实现
 var _interactiveUpdatesImpl = function (fn, a, b) {
   return fn(a, b);
 };
+//  flush交互的更新实现
 var _flushInteractiveUpdatesImpl = function () {};
 
 var isBatching = false;
 function batchedUpdates(fn, bookkeeping) {
   if (isBatching) {
+    //  如果我们正在其他批量任务中，我们需要等待，直到在重新存储状态前
+    //  完全完成
     // If we are currently inside another batch, we need to wait until it
     // fully completes before restoring state.
     return fn(bookkeeping);
@@ -2723,6 +2741,8 @@ function batchedUpdates(fn, bookkeeping) {
   try {
     return _batchedUpdatesImpl(fn, bookkeeping);
   } finally {
+    //  在这里我们等待所有更新都传播之后再存储所有受控组件的状态，这在
+    //  layer中使用受控组件是非常重要的
     // Here we wait until all updates have propagated, which is important
     // when using controlled components within layers:
     // https://github.com/facebook/react/issues/1698
@@ -2730,6 +2750,8 @@ function batchedUpdates(fn, bookkeeping) {
     isBatching = false;
     var controlledComponentsHavePendingUpdates = needsStateRestore();
     if (controlledComponentsHavePendingUpdates) {
+      //  如果一个受控事件触发，我们需要重置dom节点的状态到受控的值
+      //  这在react退出更新并且没有接触doms时非常重要
       // If a controlled event was fired, we may need to restore the state of
       // the DOM node back to the controlled value. This is necessary when React
       // bails out of the update without touching the DOM.
@@ -2744,7 +2766,7 @@ function interactiveUpdates(fn, a, b) {
 }
 
 
-
+//  设置批量更新的实现
 function setBatchingImplementation(batchedUpdatesImpl, interactiveUpdatesImpl, flushInteractiveUpdatesImpl) {
   _batchedUpdatesImpl = batchedUpdatesImpl;
   _interactiveUpdatesImpl = interactiveUpdatesImpl;
@@ -2754,6 +2776,7 @@ function setBatchingImplementation(batchedUpdatesImpl, interactiveUpdatesImpl, f
 /**
  * @see http://www.whatwg.org/specs/web-apps/current-work/multipage/the-input-element.html#input-type-attr-summary
  */
+//  支持的输入类型
 var supportedInputTypes = {
   color: true,
   date: true,
@@ -2772,6 +2795,7 @@ var supportedInputTypes = {
   week: true
 };
 
+//  是否是文字输入组件
 function isTextInputElement(elem) {
   var nodeName = elem && elem.nodeName && elem.nodeName.toLowerCase();
 
@@ -2786,6 +2810,7 @@ function isTextInputElement(elem) {
   return false;
 }
 
+//  html节点类型代表的节点
 /**
  * HTML nodeType values that represent the type of the node
  */
@@ -2796,6 +2821,7 @@ var COMMENT_NODE = 8;
 var DOCUMENT_NODE = 9;
 var DOCUMENT_FRAGMENT_NODE = 11;
 
+//  通过统计浏览器dom api中的不一致性，我们可以从原生浏览器获取节点
 /**
  * Gets the target node from a native browser event by accounting for
  * inconsistencies in browser DOM APIs.
@@ -2804,20 +2830,25 @@ var DOCUMENT_FRAGMENT_NODE = 11;
  * @return {DOMEventTarget} Target node.
  */
 function getEventTarget(nativeEvent) {
+  //  针对ie9浏览器nativeEvent.srcElement的兜底
   // Fallback to nativeEvent.srcElement for IE9
   // https://github.com/facebook/react/issues/12506
   var target = nativeEvent.target || nativeEvent.srcElement || window;
 
+  //  标准化svg元素事件
   // Normalize SVG <use> element events #4963
   if (target.correspondingUseElement) {
     target = target.correspondingUseElement;
   }
 
+  //  safari可能在下一个text节点上触发事件
   // Safari may fire events on text nodes (Node.TEXT_NODE is 3).
   // @see http://www.quirksmode.org/js/events_properties.html
   return target.nodeType === TEXT_NODE ? target.parentNode : target;
 }
 
+//  判断一个事件是否支持当下的执行环境
+//  注意，这个对于非统称的事件，例如chagen,reset,load,error等无效
 /**
  * Checks if an event is supported in the current execution environment.
  *
@@ -2837,9 +2868,11 @@ function isEventSupported(eventNameSuffix) {
   }
 
   var eventName = 'on' + eventNameSuffix;
+  //  先判断document上是否支持
   var isSupported = eventName in document;
-
+  //  如果不支持
   if (!isSupported) {
+    //  构造div，看是否支持
     var element = document.createElement('div');
     element.setAttribute(eventName, 'return;');
     isSupported = typeof element[eventName] === 'function';
@@ -2848,26 +2881,28 @@ function isEventSupported(eventNameSuffix) {
   return isSupported;
 }
 
+//  是否是check类型的input
 function isCheckable(elem) {
   var type = elem.type;
   var nodeName = elem.nodeName;
   return nodeName && nodeName.toLowerCase() === 'input' && (type === 'checkbox' || type === 'radio');
 }
-
+//  获取追踪器
 function getTracker(node) {
   return node._valueTracker;
 }
-
+//  重置追踪器
 function detachTracker(node) {
   node._valueTracker = null;
 }
-
+//  从节点中获取值
 function getValueFromNode(node) {
   var value = '';
   if (!node) {
     return value;
   }
 
+  //  根据是否是check类型的输入来确定返回内容
   if (isCheckable(node)) {
     value = node.checked ? 'true' : 'false';
   } else {
