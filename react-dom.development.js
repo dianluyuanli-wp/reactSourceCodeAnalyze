@@ -10,7 +10,11 @@
 'use strict';
 
 
-
+var process = {
+  env: {
+    NODE_ENV: 'dev'
+  }
+};
 if (process.env.NODE_ENV !== "production") {
   (function() {
 'use strict';
@@ -2912,11 +2916,18 @@ function getValueFromNode(node) {
   return value;
 }
 
+//  追踪节点上的值
 function trackValueOnNode(node) {
+  //  判断值的属性是checked还是value
   var valueField = isCheckable(node) ? 'checked' : 'value';
+  //  获取这个属性的属性描述符
   var descriptor = Object.getOwnPropertyDescriptor(node.constructor.prototype, valueField);
-
+  //  当前的值
   var currentValue = '' + node[valueField];
+
+  //  如果已经定义了value或者是safari浏览器，这个时候停止并且不再追踪值，
+  //  这会触发过多的变更上报，但是这也好过一个抛错
+  //  在某些测试中需要spyOn输入值和Safari
 
   // if someone has already defined a value or Safari, then bail
   // and don't track value will cause over reporting of changes,
@@ -2938,6 +2949,9 @@ function trackValueOnNode(node) {
       set.call(this, value);
     }
   });
+  //  我们也曾尝试在第一次定义的时候传入enumerable，但是这在
+  //  IE11和Edge14/15中会有报错，再次调用defineProperty从效果上
+  //  是一样的
   // We could've passed this the first time
   // but it triggers a bug in IE11 and Edge 14/15.
   // Calling defineProperty() again should be equivalent.
@@ -2962,20 +2976,23 @@ function trackValueOnNode(node) {
 }
 
 function track(node) {
+  //  如果有tracker直接返回
   if (getTracker(node)) {
     return;
   }
 
+  //  一旦这个只是fiber，我们可以将它移动到node._wrapperState
   // TODO: Once it's just Fiber we can move this to node._wrapperState
   node._valueTracker = trackValueOnNode(node);
 }
-
+//  在改变的时候是否更新值
 function updateValueIfChanged(node) {
   if (!node) {
     return false;
   }
 
   var tracker = getTracker(node);
+  //  如果在这个时候没有tracker,那么重试也不大可能成功
   // if there is no tracker at this point it's unlikely
   // that trying again will succeed
   if (!tracker) {
@@ -2984,15 +3001,18 @@ function updateValueIfChanged(node) {
 
   var lastValue = tracker.getValue();
   var nextValue = getValueFromNode(node);
+  //  如果新旧值不一致，那么就置tracker的值
   if (nextValue !== lastValue) {
     tracker.setValue(nextValue);
     return true;
   }
   return false;
 }
-
+//  react内部的共享变量
 var ReactSharedInternals = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
-
+//  当与旧的react包版本一起使用时，禁止从运行环境（rte）中使用较新的渲染器。
+//  当前的所有者和分发者过去式使用同一个ref的，但是pull-request14548把他们分开了
+//  以便获取更好的对react开发者工具的支持
 // Prevent newer renderers from RTE when used with older react package versions.
 // Current owner and dispatcher used to share the same ref,
 // but PR #14548 split them out to better support the react-debug-tools package.
@@ -3002,34 +3022,45 @@ if (!ReactSharedInternals.hasOwnProperty('ReactCurrentDispatcher')) {
   };
 }
 
+//  正则，匹配任意内容加正反斜杆
+//  括号内的内容是分组 https://www.jianshu.com/p/f09508c14e65
+//  match如果是全局匹配，返回的是所有的匹配项，如果不是返回的是匹配字符串，位置，原始输入，如果有分组，第二项是匹配的分组
 var BEFORE_SLASH_RE = /^(.*)[\\\/]/;
-
+//  描述组件的引用位置
 var describeComponentFrame = function (name, source, ownerName) {
   var sourceInfo = '';
   if (source) {
     var path = source.fileName;
+    //  解析出文件名
     var fileName = path.replace(BEFORE_SLASH_RE, '');
     {
       // In DEV, include code for a common special case:
       // prefer "folder/index.js" instead of just "index.js".
+      //  在开发环境下，如果文件名为index 输出带上一级路径的文件名
       if (/^index\./.test(fileName)) {
+        //  解析出反斜杠前的文件名
         var match = path.match(BEFORE_SLASH_RE);
         if (match) {
           var pathBeforeSlash = match[1];
           if (pathBeforeSlash) {
+            //  获得文件名前的文件夹的名字
             var folderName = pathBeforeSlash.replace(BEFORE_SLASH_RE, '');
             fileName = folderName + '/' + fileName;
           }
         }
       }
     }
+    //  获取最近的文件夹名和文件名，拼上代码行数
     sourceInfo = ' (at ' + fileName + ':' + source.lineNumber + ')';
   } else if (ownerName) {
     sourceInfo = ' (created by ' + ownerName + ')';
   }
+
   return '\n    in ' + (name || 'Unknown') + sourceInfo;
 };
 
+//  Symbol通常用来标识React元素的类型，如果不支持原生Symbol或者没有兼容方案，
+//  出于性能考虑直接使用数字来标识
 // The Symbol used to tag the ReactElement-like types. If there is no native Symbol
 // nor polyfill, then a plain number is used for performance.
 var hasSymbol = typeof Symbol === 'function' && Symbol.for;
@@ -3051,6 +3082,7 @@ var REACT_LAZY_TYPE = hasSymbol ? Symbol.for('react.lazy') : 0xead4;
 var MAYBE_ITERATOR_SYMBOL = typeof Symbol === 'function' && Symbol.iterator;
 var FAUX_ITERATOR_SYMBOL = '@@iterator';
 
+//  获取迭代器函数
 function getIteratorFn(maybeIterable) {
   if (maybeIterable === null || typeof maybeIterable !== 'object') {
     return null;
