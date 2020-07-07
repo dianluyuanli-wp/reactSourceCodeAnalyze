@@ -9,25 +9,12 @@
 
 'use strict';
 
+(function (global, factory) {
+	typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory(require('react')) :
+	typeof define === 'function' && define.amd ? define(['react'], factory) :
+	(global.ReactDOM = factory(global.React));
+}(this, (function (React) { 'use strict';
 
-var process = {
-  env: {
-    NODE_ENV: 'dev'
-  }
-};
-if (process.env.NODE_ENV !== "production") {
-  (function() {
-'use strict';
-
-var React = require('react');
-var _assign = require('object-assign');
-var checkPropTypes = require('prop-types/checkPropTypes');
-//  一个浏览器环境下任务调度的库
-var scheduler = require('scheduler');
-var tracing = require('scheduler/tracing');
-
-//  使用invariant来判断入参的不变性
-//  使用类似sprintf的格式来处理入参，相关信息会被移除，但是函数本身在生产环境会被保留
 /**
  * Use invariant() to assert state which your program assumes to be true.
  *
@@ -49,72 +36,42 @@ var validateFormat = function () {};
   };
 }
 
-//  报错方法，跟react中的完全一样
 function invariant(condition, format, a, b, c, d, e, f) {
   validateFormat(format);
 
   if (!condition) {
     var error = void 0;
     if (format === undefined) {
-      //  如果没有格式，抛出非格式化的错误
-      //  压缩后的代码有抛错发生，请使用非压缩的开发模式，以便获取完整的报错信息
       error = new Error('Minified exception occurred; use the non-minified dev environment ' + 'for the full error message and additional helpful warnings.');
     } else {
       var args = [a, b, c, d, e, f];
       var argIndex = 0;
-      //  replace方法会对每一个匹配项返回回调函数的返回值
-      //  生成错误提示
       error = new Error(format.replace(/%s/g, function () {
         return args[argIndex++];
       }));
-      //  报错的名字是不变性的破坏
       error.name = 'Invariant Violation';
     }
-    //  我们并不care 报错函数本身的调用栈，位置置为1，frame这里可以理解为调用栈中的某一帧
+
     error.framesToPop = 1; // we don't care about invariant's own frame
     throw error;
   }
 }
 
-//  依靠对invariant的实现，我们可以保持格式和参数在web的构建中
 // Relying on the `invariant()` implementation lets us
 // preserve the format and params in the www builds.
 
-//  判断React是否存在，如果不存在报错
-//  ReactDOM先于react加载，请确保你在加载ReactDOM包之前加载了React包
 !React ? invariant(false, 'ReactDOM was loaded before React. Make sure you load the React package before loading ReactDOM.') : void 0;
 
-//  唤起受保护回调的接口实现 看样子所有的函数都用这个东西包过，impl就是函数接口的抽象实现，使用try catch捕获错误
 var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f) {
-  //  从第四个参数开始
   var funcArgs = Array.prototype.slice.call(arguments, 3);
   try {
-    //  启用上下文
     func.apply(context, funcArgs);
   } catch (error) {
     this.onError(error);
   }
 };
 
-//  这里补充下笔者的理解： 生产环境下用try catch,尽量不使应用宕机
-//  开发环境下想要遇到异常时抛错但是不中断应用，这里通过自定义全局
-//  的onError事件，通过监听error事件，利用不同的事件循环保证捕获
-//  错误又不中断程序执行
 {
-  //  关于报错的处理
-
-  //  在开发模式下，我们将在某些版本下替换invokeGuardedCallback，以便有更好的浏览器开发工具体验，
-  //  这是为了保留'异常时暂停'的特性。因为react用invokeGuardedCallback封装了所有用户提供的
-  //  函数，生产环境的invokeGuardedCallback使用了try catch,所有用户的异常将会像原生的异常捕获
-  //  那样被处理，开发者工具将不会暂停代码执行除非开发者使用了额外的手段来保证代码暂停并捕获异常。这
-  //  是反直觉的，因为尽管react捕获到了错误，但是从开发者的视角来看，错误并没有被捕获
-
-  //  为了保留期望的`暂停并且抛错`的特性，我们在开发环境中并没有使用try catch,反之，我们同步地对
-  //  虚拟DOM发送了一个虚拟的事件，然后在伪造的事件处理器中调用了用户提供的回调函数，如果回调被抛出
-  //  错，这个错误将会被全局的事件处理器捕获。但是因为错误的发生在一个不同的事件循环上下文中，
-  //  这不会打断通常的程序流。事实上，这给我们提供了try-catch的体验但实际上并没有真的使用try-catch
-  //  非常的巧妙（官方挺得意的）
-
   // In DEV mode, we swap out invokeGuardedCallback for a special version
   // that plays more nicely with the browser's DevTools. The idea is to preserve
   // "Pause on exceptions" behavior. Because React wraps all user-provided
@@ -134,37 +91,18 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
   // Effectively, this gives us try-catch behavior without actually using
   // try-catch. Neat!
 
-  //  判断浏览器是否支持我们需要实现的api,以便我们能够实现在开发环境下特殊功能的invokeGuardedCallback
-
   // Check that the browser supports the APIs we need to implement our special
   // DEV version of invokeGuardedCallback
-
-  //  确保是浏览器环境且支持document.createEvent api
   if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof document !== 'undefined' && typeof document.createEvent === 'function') {
-    //  创建一个假节点
     var fakeNode = document.createElement('react');
 
-    //  定义开发环境下的invokeGuardedCallback
     var invokeGuardedCallbackDev = function (name, func, context, a, b, c, d, e, f) {
-      //  如果document不存在,我们调用的createEvent方法的时候肯定会报错。这样会产生令人
-      //  困惑的问题（详情链接：https://github.com/facebookincubator/create-react-app/issues/3482）
-      //  所以我们先发制人，抛出一个更友好的报错信息
-
       // If document doesn't exist we know for sure we will crash in this method
       // when we call document.createEvent(). However this can cause confusing
       // errors: https://github.com/facebookincubator/create-react-app/issues/3482
       // So we preemptively throw with a better message instead.
-
-      //  document在react初始化的时候是定义了的，但是现在不在有定义.这有可能发生在测试环境中当
-      //  某个组件在一个异步回调中发生了更新，但此时测试已经结束了。为了解决这个问题，你可以在
-      //  测试完成时卸载组件（确保所有的异步操作在componentWillUnmoent已经取消），或者让测试过程
-      //  本身变成异步的
       !(typeof document !== 'undefined') ? invariant(false, 'The `document` global was defined when React was initialized, but is not defined anymore. This can happen in a test environment if a component schedules an update from an asynchronous callback, but the test has already finished running. To solve this, you can either unmount the component at the end of your test (and ensure that any asynchronous operations get canceled in `componentWillUnmount`), or you can change the test itself to be asynchronous.') : void 0;
       var evt = document.createEvent('Event');
-
-      //  追踪用户提供的回调是否抛出错误。在一开始我们把它置为true,在调用回调之后我们
-      //  马上将他置为false.如果这个函数报错了，didError永远不会被置为false。这个策略在浏览器
-      //  比较low或者调用全局错误处理函数失败时依然生效，因为他本身并不依赖error事件
 
       // Keeps track of whether the user-provided callback threw an error. We
       // set this to true at the beginning, then set it to false right after
@@ -172,68 +110,39 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
       // set to false. This strategy works even if the browser is flaky and
       // fails to call our global error handler, because it doesn't rely on
       // the error event at all.
-      //  跟踪是否调用了用户提供的error处理函数
       var didError = true;
 
       // Keeps track of the value of window.event so that we can reset it
       // during the callback to let user code access window.event in the
       // browsers that support it.
-
-      //  跟踪window.event的值，方便我们在回调过程中重置，使得用户代码能够在支持的浏览器中获取到这个方法
-
-      //  window的event事件
       var windowEvent = window.event;
-
-      //  获取window.event的事件描述符
 
       // Keeps track of the descriptor of window.event to restore it after event
       // dispatching: https://github.com/facebook/react/issues/13688
-      //  获取属性描述符
       var windowEventDescriptor = Object.getOwnPropertyDescriptor(window, 'event');
-
-      //  为我们伪造的事件创建一个事件句柄。我们将会通过dispatchEvent同步地触发我们的伪造事件
-      //  在这个句柄中，我们将会调用用户提供的回调
 
       // Create an event handler for our fake event. We will synchronously
       // dispatch our fake event using `dispatchEvent`. Inside the handler, we
       // call the user-provided callback.
       var funcArgs = Array.prototype.slice.call(arguments, 3);
       function callCallback() {
-        //  我们立即移除事件监听器上的回调，使得内嵌的invokeGuardedCallback并不会冲突
-        //  否则的话，内嵌的调用将会触发上层堆栈中的伪造事件的handler
-
         // We immediately remove the callback from event listeners so that
         // nested `invokeGuardedCallback` calls do not clash. Otherwise, a
         // nested call would trigger the fake event handlers of any call higher
         // in the stack.
         fakeNode.removeEventListener(evtType, callCallback, false);
 
-        //  我们检查event是否是window的自有属性，避免在IE小于等于10的浏览器中在
-        //  严格模式下报错，在firefox浏览器中并不支持window.event
-
         // We check for window.hasOwnProperty('event') to prevent the
         // window.event assignment in both IE <= 10 as they throw an error
         // "Member not found" in strict mode, and in Firefox which does not
         // support window.event.
-
-        //  还原window.event
         if (typeof window.event !== 'undefined' && window.hasOwnProperty('event')) {
           window.event = windowEvent;
         }
 
-        //  调用用户传入的函数，绑定上下文
         func.apply(context, funcArgs);
-        //  调用了用户的错误回调后置状态
         didError = false;
       }
-
-      //  创建一个全局的error处理程序。我们用它来捕获抛出的所有值。这个error处理程序
-      //  很有可能触发不止一次，例如，如果非react节点也调用了dispatchEvent,并且用了一个
-      //  事件句柄来抛出事件。我们应该兼容绝大多数上述情况。即便我们的error处理程序
-      //  触发了多次，最有一个error事件总是被使用的。如果回调事实上抛错了，我们知道
-      //  最后一个错误事件是真正的那个报错，因为不会有其他的错误发生在我们回调报错和
-      //  dispatchEvent调用的代码之间。如果回调没有报错，但是error事件依然被触发，
-      //  我们知道可以忽略它，因为didError是false，正如上面解释的那样。
 
       // Create a global error event handler. We use this to capture the value
       // that was thrown. It's possible that this error handler will fire more
@@ -247,28 +156,17 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
       // the callback doesn't error, but the error event was fired, we know to
       // ignore it because `didError` will be false, as described above.
       var error = void 0;
-
-      //  用这个变量控制error事件是否抛出
       // Use this to track whether the error event is ever called.
       var didSetError = false;
       var isCrossOriginError = false;
 
-      //  window下的报错处理函数
       function handleWindowError(event) {
         error = event.error;
         didSetError = true;
-        //  这里判断是否是跨域错误，根据事件的行数和列数来判断
         if (error === null && event.colno === 0 && event.lineno === 0) {
           isCrossOriginError = true;
         }
-        //  API: event.defaultPrevented,返回一个布尔值，表明当前事件是否调用了 event.preventDefault()方法。
-        //  https://developer.mozilla.org/zh-CN/docs/Web/API/Event/defaultPrevented
-
-        //  如果取消了默认行为
         if (event.defaultPrevented) {
-          //  一些error的处理句柄取消了默认行为，浏览器拦截了这些上报
-          //  我们将会记录这些并且稍后确定是否上报错误
-
           // Some other error handler has prevented default.
           // Browsers silence the error report if this happens.
           // We'll remember this to later decide whether to log it or not.
@@ -282,80 +180,50 @@ var invokeGuardedCallbackImpl = function (name, func, context, a, b, c, d, e, f)
         }
       }
 
-      //  创建一个事件类型
       // Create a fake event type.
       var evtType = 'react-' + (name ? name : 'invokeguardedcallback');
 
-      //  添加我们自己的时间处理方法
       // Attach our event handlers
-      //  window添加检测报错
       window.addEventListener('error', handleWindowError);
-      //  在我们的react伪节点上添加用户回调的事件监听
       fakeNode.addEventListener(evtType, callCallback, false);
 
-      //  异步触发我们的自定义报错事件，如果用户提供的函数报错，这将会
-      //  触发我们的全局错误处理函数
       // Synchronously dispatch our fake event. If the user-provided function
       // errors, it will trigger our global error handler.
-
-      //  https://www.w3school.com.cn/jsref/event_initevent.asp
-      //  初始化之前创建的事件，该事件无法冒泡，无法取消默认行为
       evt.initEvent(evtType, false, false);
-      //  在伪节点上触发事件
       fakeNode.dispatchEvent(evt);
 
-      //  恢复window.event属性
       if (windowEventDescriptor) {
         Object.defineProperty(window, 'event', windowEventDescriptor);
       }
 
-      //  如果确实报错了
       if (didError) {
         if (!didSetError) {
-          //  回调报错了，但是错误并没有触发
           // The callback errored, but the error event never fired.
-
-          //  你的组建内部抛出了一个错误，但是react不知道具体是什么
-          //  这很有可能是浏览器内部的bug,react竭尽所能地保证开发环境
-          //  下在跑错处暂停的特性,这需要一些在开发模式下的trick，这
-          //  很有可能在你的浏览器中有一些问题.可以在生产环境下触发这
-          //  报错，或者更换现代浏览器。如果你确信这是react自己的问题
-          //  你可以给我们提issue
           error = new Error('An error was thrown inside one of your components, but React ' + "doesn't know what it was. This is likely due to browser " + 'flakiness. React does its best to preserve the "Pause on ' + 'exceptions" behavior of the DevTools, which requires some ' + "DEV-mode only tricks. It's possible that these don't work in " + 'your browser. Try triggering the error in production mode, ' + 'or switching to a modern browser. If you suspect that this is ' + 'actually an issue with React, please file an issue.');
         } else if (isCrossOriginError) {
-          //  抛出了一个跨域错误，react并没有办法在开发环境中获取真实
-          //  的error对象 
-          //  https://fb.me/react-crossorigin-error
           error = new Error("A cross-origin error was thrown. React doesn't have access to " + 'the actual error object in development. ' + 'See https://fb.me/react-crossorigin-error for more information.');
         }
-        //  调用error
         this.onError(error);
       }
 
-      //  移除我们的监听器
       // Remove our event listeners
       window.removeEventListener('error', handleWindowError);
     };
 
-    //  开发环境下替换invokeGuardedCallbackImpl
     invokeGuardedCallbackImpl = invokeGuardedCallbackDev;
   }
 }
 
-//  给invokeGuardedCallbackImpl换个名字
 var invokeGuardedCallbackImpl$1 = invokeGuardedCallbackImpl;
 
-//  通过Fiber来模拟一次try_catch
 // Used by Fiber to simulate a try-catch.
 var hasError = false;
 var caughtError = null;
 
-//  通过事件流系统来捕获或者再次throw第一个error
 // Used by event system to capture/rethrow the first error.
 var hasRethrowError = false;
 var rethrowError = null;
 
-//  这里对应之前的this.onError,只是单纯的记录error
 var reporter = {
   onError: function (error) {
     hasError = true;
@@ -363,9 +231,6 @@ var reporter = {
   }
 };
 
-//  调用一个函数，同时防止函数内部发生错误。有错误时return错误，否则返回null
-//  在开发环境下，这是通过try-catch实现的。在开发环境下不直接使用try-catch的原因是
-//  我们能够替换一个不同的实现。
 /**
  * Call a function while guarding against errors that happens within it.
  * Returns an error if it throws, otherwise null.
@@ -385,9 +250,6 @@ function invokeGuardedCallback(name, func, context, a, b, c, d, e, f) {
   invokeGuardedCallbackImpl$1.apply(reporter, arguments);
 }
 
-//  跟invokeGuardedCallback类似，唯一的不同是它并不返回一个error,而是将它
-//  存储在一个全局变量中，使其能够稍后被rethrowCaughtError抛出
-//  TODO: 看看caughtError和rethrowError能否合并
 /**
  * Same as invokeGuardedCallback, but instead of returning an error, it stores
  * it in a global so it can be rethrown by `rethrowCaughtError` later.
@@ -409,8 +271,6 @@ function invokeGuardedCallbackAndCatchFirstError(name, func, context, a, b, c, d
   }
 }
 
-//  在保护函数（就是那个封装过的运行用户传入function的函数）执行的过程中，我们
-//  将会捕获并rethrow这个error, 它将被顶层error处理句柄处理
 /**
  * During execution of guarded functions we will capture the first error which
  * we will rethrow to be handled by the top level error handler.
@@ -424,12 +284,10 @@ function rethrowCaughtError() {
   }
 }
 
-//  是否捕获error
 function hasCaughtError() {
   return hasError;
 }
 
-//  清空报错
 function clearCaughtError() {
   if (hasError) {
     var error = caughtError;
@@ -437,67 +295,46 @@ function clearCaughtError() {
     caughtError = null;
     return error;
   } else {
-    //  clearCaughtError被调用但是当下并没有error被捕获，这个错误很有可能
-    //  是由于react内部的错误引起的，请给我们提issue
     invariant(false, 'clearCaughtError was called but no error was captured. This error is likely caused by a bug in React. Please file an issue.');
   }
 }
 
-//  事件插件的顺序列表（可注入的）
 /**
  * Injectable ordering of event plugins.
  */
 var eventPluginOrder = null;
 
-//  从名字到事件插件模块的映射
 /**
  * Injectable mapping from names to event plugin modules.
  */
 var namesToPlugins = {};
 
-//  通过注入的插件和插件的顺序重新计算插件列表
 /**
  * Recomputes the plugin list using the injected plugins and plugin ordering.
  *
  * @private
  */
-
-//  这里的eventPluginOrder其实就是DOMEventPluginOrder，是一个字符串数组，里面有
-//  插件的名字
-//  将eventPluginOrder中的插件同序号复制到plugins，并且发布事件
-//  重新计算插件顺序
 function recomputePluginOrdering() {
   if (!eventPluginOrder) {
-    //  在eventPluginOrder被注入前保持等待
     // Wait until an `eventPluginOrder` is injected.
     return;
   }
-  //  双重循环，先遍历插件，再遍历插件的事件
   for (var pluginName in namesToPlugins) {
     var pluginModule = namesToPlugins[pluginName];
     var pluginIndex = eventPluginOrder.indexOf(pluginName);
-    //  如果插件没有出现在排序插件列表里
-    //  事件插件登记：不能注入在排序插件列表中没有注册的插件
     !(pluginIndex > -1) ? invariant(false, 'EventPluginRegistry: Cannot inject event plugins that do not exist in the plugin ordering, `%s`.', pluginName) : void 0;
-    //  如果已经有了插件，那就校验下一个
     if (plugins[pluginIndex]) {
       continue;
     }
-    //  校验是否存在extractEvent方法
-    //  EventPluginRegistry: 事件插件必须实现extractEvents方法，但是xxx插件没有
     !pluginModule.extractEvents ? invariant(false, 'EventPluginRegistry: Event plugins must implement an `extractEvents` method, but `%s` does not.', pluginName) : void 0;
-    //  给插件数组注册模块，其顺序跟eventPluginOrder一致
     plugins[pluginIndex] = pluginModule;
     var publishedEvents = pluginModule.eventTypes;
     for (var eventName in publishedEvents) {
-      //  发布插件的事件，返回bool值
-      //  EventPluginRegistry: 插件xx的xxs事件发布失败
       !publishEventForPlugin(publishedEvents[eventName], pluginModule, eventName) ? invariant(false, 'EventPluginRegistry: Failed to publish event `%s` for plugin `%s`.', eventName, pluginName) : void 0;
     }
   }
 }
 
-//  发布一个事件，使其能够被应用的插件所处理
 /**
  * Publishes an event so that it can be dispatched by the supplied plugin.
  *
@@ -506,21 +343,13 @@ function recomputePluginOrdering() {
  * @return {boolean} True if the event was successfully published.
  * @private
  */
-//  发布一个事件，使其能够被插件分发
 function publishEventForPlugin(dispatchConfig, pluginModule, eventName) {
-  //  名称校验
-  //  判断这个事件名的配置是否已经注册
-  //  EventPluginHub：有多个插件使用同一个名字
   !!eventNameDispatchConfigs.hasOwnProperty(eventName) ? invariant(false, 'EventPluginHub: More than one plugin attempted to publish the same event name, `%s`.', eventName) : void 0;
-  //  注册配置配置
   eventNameDispatchConfigs[eventName] = dispatchConfig;
 
-  //  分阶段注册的名字
   var phasedRegistrationNames = dispatchConfig.phasedRegistrationNames;
-  //  如果有多个已注册的名字，就遍历并发布
   if (phasedRegistrationNames) {
     for (var phaseName in phasedRegistrationNames) {
-      //  只针对自有属性进行处理
       if (phasedRegistrationNames.hasOwnProperty(phaseName)) {
         var phasedRegistrationName = phasedRegistrationNames[phaseName];
         publishRegistrationName(phasedRegistrationName, pluginModule, eventName);
@@ -528,15 +357,11 @@ function publishEventForPlugin(dispatchConfig, pluginModule, eventName) {
     }
     return true;
   } else if (dispatchConfig.registrationName) {
-    //  只有一个的话就直接发布
     publishRegistrationName(dispatchConfig.registrationName, pluginModule, eventName);
     return true;
   }
-  //  返回标示值
   return false;
 }
-
-//  发布一个注册的名字（用来区分分发事件）
 
 /**
  * Publishes a registration name that is used to identify dispatched events.
@@ -546,77 +371,55 @@ function publishEventForPlugin(dispatchConfig, pluginModule, eventName) {
  * @private
  */
 function publishRegistrationName(registrationName, pluginModule, eventName) {
-  //  验证是否有重复的登记名，有的话报错
-  //  EventPluginHub: 有多个插件使用同一个登记名
   !!registrationNameModules[registrationName] ? invariant(false, 'EventPluginHub: More than one plugin attempted to publish the same registration name, `%s`.', registrationName) : void 0;
-  //  记录模块
   registrationNameModules[registrationName] = pluginModule;
-  //  记录依赖
   registrationNameDependencies[registrationName] = pluginModule.eventTypes[eventName].dependencies;
 
-  //  记录登记名
   {
     var lowerCasedName = registrationName.toLowerCase();
-    //  可能的登记名map
     possibleRegistrationNames[lowerCasedName] = registrationName;
-    //  双击事件另外处理
+
     if (registrationName === 'onDoubleClick') {
-      //  给ondblclick换个名字onDoubleClick
       possibleRegistrationNames.ondblclick = registrationName;
     }
   }
 }
 
-//  注册插件，方便后续的提取和事件分发
 /**
  * Registers plugins so that they can extract and dispatch events.
  *
  * @see {EventPluginHub}
  */
 
-//  注入插件的排序列表 
 /**
  * Ordered list of injected plugins.
  */
-
- // 注入的有序插件，可以提取和分发事件
 var plugins = [];
 
-//  事件名和分发配置之间的映射
 /**
  * Mapping from event name to dispatch config
  */
-//  把事件名和分发的配置结合起来
 var eventNameDispatchConfigs = {};
 
-//  登记名和插件模块之间的映射
 /**
  * Mapping from registration name to plugin module
  */
-//  把登记名和插件模块映射
 var registrationNameModules = {};
 
 /**
  * Mapping from registration name to event name
  */
-//  把登记名和事件名映射
 var registrationNameDependencies = {};
 
-//  将小写的登记名映射到合适的版本，过去用来在缺少事件处理句柄时报错用
-//  只有在true时可用
 /**
  * Mapping from lowercase registration names to the properly cased version,
  * used to warn in the case of missing event handlers. Available
  * only in true.
  * @type {Object}
  */
-//  把小写的登记名映射到合适的大小写
 var possibleRegistrationNames = {};
-//  相信开发者只会使用真实的possibleRegistrationNames
 // Trust the developer to only use possibleRegistrationNames in true
 
-//  注入排序后的插件（根据插件的名字排序）。这使得排序能够从实际的插件注入中解耦
-//  ,从而排序始终是动态的，忽略打包、动态注入等等的影响
 /**
  * Injects an ordering of plugins (by plugin name). This allows the ordering
  * to be decoupled from injection of the actual plugins so that ordering is
@@ -626,19 +429,13 @@ var possibleRegistrationNames = {};
  * @internal
  * @see {EventPluginHub.injection.injectEventPluginOrder}
  */
-//  注入时间插件排序
 function injectEventPluginOrder(injectedEventPluginOrder) {
-  //  如果已经有排序的时间插件
   !!eventPluginOrder ? invariant(false, 'EventPluginRegistry: Cannot inject event plugin ordering more than once. You are likely trying to load more than one copy of React.') : void 0;
   // Clone the ordering so it cannot be dynamically mutated.
-  //  克隆一个副本
   eventPluginOrder = Array.prototype.slice.call(injectedEventPluginOrder);
   recomputePluginOrdering();
 }
 
-//  被事件插件总线使用的注入插件，插件名字的顺序需要跟injectEventPluginOrder顺序
-//  保持一致
-//  插件注入能够作为页面初始化的一部分，或者动态注入
 /**
  * Injects plugins to be used by `EventPluginHub`. The plugin names must be
  * in the ordering injected by `injectEventPluginOrder`.
@@ -649,35 +446,23 @@ function injectEventPluginOrder(injectedEventPluginOrder) {
  * @internal
  * @see {EventPluginHub.injection.injectEventPluginsByName}
  */
-//  根据名字注入事件插件
 function injectEventPluginsByName(injectedNamesToPlugins) {
   var isOrderingDirty = false;
   for (var pluginName in injectedNamesToPlugins) {
-    //  如果不是自有属性，就继续循环
     if (!injectedNamesToPlugins.hasOwnProperty(pluginName)) {
       continue;
     }
     var pluginModule = injectedNamesToPlugins[pluginName];
-    //  如果名字到插件的映射中没有注册这个插件，或者两个集合的映射不一致
     if (!namesToPlugins.hasOwnProperty(pluginName) || namesToPlugins[pluginName] !== pluginModule) {
-      //  如果已将有了同名插件
-      //  EventPluginRegistry: 注入的两个时间插件不能使用同一个名字
       !!namesToPlugins[pluginName] ? invariant(false, 'EventPluginRegistry: Cannot inject two different event plugins using the same name, `%s`.', pluginName) : void 0;
-      //  添加新的插件
       namesToPlugins[pluginName] = pluginModule;
-      //  标识顺序已经被打乱
       isOrderingDirty = true;
     }
   }
-  //  如果插件池被污染，那就重新计算
   if (isOrderingDirty) {
     recomputePluginOrdering();
   }
 }
-
-//  跟invariant类似，但是它仅仅在条件不满足时才输入logs.他可以在开发环境下输出
-//  带绝对路径的log.在生产环境下移除log代码将会保持一样的逻辑并且遵循一致
-//  的代码路径
 
 /**
  * Similar to invariant but only logs a warning if the condition is not met.
@@ -686,7 +471,6 @@ function injectEventPluginsByName(injectedNamesToPlugins) {
  * same logic and follow the same code paths.
  */
 
- // 警告方法
 var warningWithoutStack = function () {};
 
 {
@@ -696,14 +480,10 @@ var warningWithoutStack = function () {};
     }
 
     if (format === undefined) {
-      //  告警信息需要参数
       throw new Error('`warningWithoutStack(condition, format, ...args)` requires a warning ' + 'message argument');
     }
     if (args.length > 8) {
-      //  检查条件是否满足以便更早的捕获错误
       // Check before the condition to catch violations early.
-
-      //  warningWithoutStach只支持8个参数
       throw new Error('warningWithoutStack() currently supports at most 8 arguments.');
     }
     if (condition) {
@@ -715,18 +495,11 @@ var warningWithoutStack = function () {};
       });
       argsWithFormat.unshift('Warning: ' + format);
 
-      //  这里不直接使用.apply是因为在IE9下会有问题
-      //  这个用法看不懂的，看看这篇https://www.cnblogs.com/web-record/p/10477778.html
-
       // We intentionally don't use spread (or .apply) directly because it
       // breaks IE9: https://github.com/facebook/react/issues/13610
       Function.prototype.apply.call(console.error, console, argsWithFormat);
     }
     try {
-      //  欢迎为react debug
-      //  为了方便起见，报错在这里将会被抛出，你就可以用这里的调用栈其找出
-      //  触发这个错误调用位置
-
       // --- Welcome to debugging React ---
       // This error was thrown as a convenience so that you can use this stack
       // to find the callsite that caused this warning to fire.
@@ -735,37 +508,25 @@ var warningWithoutStack = function () {};
         return args[argIndex++];
       });
       throw new Error(message);
-    } catch (x) {
-      //  可以在这里输入error,方便调试
-    }
+    } catch (x) {}
   };
 }
 
 var warningWithoutStack$1 = warningWithoutStack;
 
-//  从节点获取fiber当前的属性
 var getFiberCurrentPropsFromNode = null;
-//  从节点获取实例
 var getInstanceFromNode = null;
-//  从实例获取节点
 var getNodeFromInstance = null;
 
-//  设置组件树
 function setComponentTree(getFiberCurrentPropsFromNodeImpl, getInstanceFromNodeImpl, getNodeFromInstanceImpl) {
-  //  替换getFiberCurrentPropsFromNode的实现
   getFiberCurrentPropsFromNode = getFiberCurrentPropsFromNodeImpl;
-  //  替换getInstanceFromNode的实现
   getInstanceFromNode = getInstanceFromNodeImpl;
-  //  替换getNodeFromInstance的实现
   getNodeFromInstance = getNodeFromInstanceImpl;
   {
-    //  EventPluginUtils.setComponentTree: 注入的模块丢失了getNodeFromInstance或getInstanceFromNode的实现
     !(getNodeFromInstance && getInstanceFromNode) ? warningWithoutStack$1(false, 'EventPluginUtils.setComponentTree(...): Injected ' + 'module is missing getNodeFromInstance or getInstanceFromNode.') : void 0;
   }
 }
 
-//  验证事件的触发
-//  实例的数目和其上的监听器的数目要一一对应
 var validateEventDispatches = void 0;
 {
   validateEventDispatches = function (event) {
@@ -778,55 +539,40 @@ var validateEventDispatches = void 0;
     var instancesIsArr = Array.isArray(dispatchInstances);
     var instancesLen = instancesIsArr ? dispatchInstances.length : dispatchInstances ? 1 : 0;
 
-    //  实例和监听器的长度要一致，性质也要一致
-    //  EventPluginUtils: 不可用的事件
     !(instancesIsArr === listenersIsArr && instancesLen === listenersLen) ? warningWithoutStack$1(false, 'EventPluginUtils: Invalid `event`.') : void 0;
   };
 }
 
-//  将事件分发到监听器
 /**
  * Dispatch the event to the listener.
  * @param {SyntheticEvent} event SyntheticEvent to handle
  * @param {function} listener Application-level callback
  * @param {*} inst Internal component instance
  */
-
- // 执行事件触发
 function executeDispatch(event, listener, inst) {
   var type = event.type || 'unknown-event';
-  //  修改事件的当前目标为实例对应的node元素
   event.currentTarget = getNodeFromInstance(inst);
-  //  执行绑定的函数
   invokeGuardedCallbackAndCatchFirstError(type, listener, undefined, event);
   event.currentTarget = null;
 }
 
-//  通过事件手机的分发进行标准/简单的迭代
 /**
  * Standard/simple iteration through an event's collected dispatches.
  */
-//  按顺序调度事件
 function executeDispatchesInOrder(event) {
-  //  事件分发的监听器
   var dispatchListeners = event._dispatchListeners;
-  //  事件分发的实例
   var dispatchInstances = event._dispatchInstances;
   {
-    //  先校验
     validateEventDispatches(event);
   }
   if (Array.isArray(dispatchListeners)) {
     for (var i = 0; i < dispatchListeners.length; i++) {
-      //  是否停止传播
       if (event.isPropagationStopped()) {
         break;
       }
-      //  监听器和实例是两个平行的数组，二者是同步的
       // Listeners and Instances are two parallel arrays that are always in sync.
       executeDispatch(event, dispatchListeners[i], dispatchInstances[i]);
     }
-    //  如果dispatchListeners不是数组
   } else if (dispatchListeners) {
     executeDispatch(event, dispatchListeners, dispatchInstances);
   }
@@ -838,9 +584,6 @@ function executeDispatchesInOrder(event) {
  * @see executeDispatchesInOrderStopAtTrueImpl
  */
 
- // 直接分发的执行-一个事件最多累计有一个分发否则的话就是error.一个事件上
- // 有多个分发（冒泡）去追踪每个分发执行后的返回值是没有意义的，但是在处理
- // 直接分发时是有意义的
 
 /**
  * Execution of a "direct" dispatch - there must be at most one dispatch
@@ -858,11 +601,6 @@ function executeDispatchesInOrder(event) {
  * @return {boolean} True iff number of dispatches accumulated is greater than 0.
  */
 
- // 进行整合的第一个参数不能为null或者underfined,这个过去是为了保护内存避免数组的分配。
- // 因此牺牲了API的简洁性。因为‘current’可能在传入的时候为null，在函数执行之后就不是null
- // 确保将其指回current
- // 这个api应该谨慎使用，尝试累加一些比较合规的参数
-
 /**
  * Accumulates items that must not be null or undefined into the first one. This
  * is used to conserve memory by avoiding array allocations, and thus sacrifices
@@ -876,22 +614,17 @@ function executeDispatchesInOrder(event) {
  * @return {*|array<*>} An accumulation of items.
  */
 
- // 聚合函数，把两个东西拼成一个数组
 function accumulateInto(current, next) {
-  //  聚合的元素不能为null或者undefined
   !(next != null) ? invariant(false, 'accumulateInto(...): Accumulated items must not be null or undefined.') : void 0;
 
   if (current == null) {
     return next;
   }
 
-  //  curretn和next都不为空。告警：永远不要调用x.concat(y)等你不确定x是否是数组的时候
-  //  x很有可能是字符串（字符串也有concat方法）
   // Both are not empty. Warning: Never call x.concat(y) when you are not
   // certain that x is an Array (x could be a string with concat method).
   if (Array.isArray(current)) {
     if (Array.isArray(next)) {
-      //  apply调用的时候参数是数组
       current.push.apply(current, next);
       return current;
     }
@@ -900,7 +633,6 @@ function accumulateInto(current, next) {
   }
 
   if (Array.isArray(next)) {
-    //  修改next优点太危险了
     // A bit too dangerous to mutate `next`.
     return [current].concat(next);
   }
@@ -908,9 +640,6 @@ function accumulateInto(current, next) {
   return [current, next];
 }
 
-//  arr: 为数组或者单个的元素。当其和‘accumulate’的模块对比时有用。这是一个
-//  使得我们能够对元素集合进行推理的简单的实例，但是我们处理了只有单个元素的
-//  case,此时我们并不需要分配一个数组
 /**
  * @param {array} arr an "accumulation" of items which is either an Array or
  * a single item. Useful when paired with the `accumulate` module. This is a
@@ -920,7 +649,6 @@ function accumulateInto(current, next) {
  * @param {function} cb Callback invoked with each element or a collection.
  * @param {?} [scope] Scope used as `this` in a callback.
  */
-//  给每个元素调用回调
 function forEachAccumulated(arr, cb, scope) {
   if (Array.isArray(arr)) {
     arr.forEach(cb, scope);
@@ -929,28 +657,22 @@ function forEachAccumulated(arr, cb, scope) {
   }
 }
 
-//  内部的事件队列，累积了他们的分发，等待分发依次执行
 /**
  * Internal queue of events that have accumulated their dispatches and are
  * waiting to have their dispatches executed.
  */
-//  事件队列
 var eventQueue = null;
 
-//  分派事件并将其释放回池中，除非是持久的。
 /**
  * Dispatches an event and releases it back into the pool, unless persistent.
  *
  * @param {?object} event Synthetic event to be dispatched.
  * @private
  */
-//  执行事件的分发并释放
 var executeDispatchesAndRelease = function (event) {
   if (event) {
-    //  按顺序执行调度事件
     executeDispatchesInOrder(event);
 
-    //  如果不是持久事件，就释放
     if (!event.isPersistent()) {
       event.constructor.release(event);
     }
@@ -960,13 +682,10 @@ var executeDispatchesAndReleaseTopLevel = function (e) {
   return executeDispatchesAndRelease(e);
 };
 
-//  是否是可交互的
 function isInteractive(tag) {
   return tag === 'button' || tag === 'input' || tag === 'select' || tag === 'textarea';
 }
 
-//  是否阻断鼠标事件
-//  是否避免事件鼠标行为
 function shouldPreventMouseEvent(name, type, props) {
   switch (name) {
     case 'onClick':
@@ -979,22 +698,12 @@ function shouldPreventMouseEvent(name, type, props) {
     case 'onMouseMoveCapture':
     case 'onMouseUp':
     case 'onMouseUpCapture':
-      //  如果不是可交互的元素
       return !!(props.disabled && isInteractive(type));
     default:
       return false;
   }
 }
 
-//  提取事件，当事件被触发的时候，这个方法将会入队并且被触发
-//  事件类型，可选，每个触发事件的插件必须发布一个映射以便等价监听器，映射的值必须有registrationName和phasedRegistrationNames两个参数
-//  执行分发，重写监听器函数
-
-//  这是一个为事件插件的整合的接口，方便插件的安装和配置
-//  事件的插件通过以下属性来实现
-
-//  extractEvents提取事件，必须，当顶级事件被触发的时候，这个方法将同步提取事件
-//  这些事件将会入队并且分发
 /**
  * This is a unified interface for event plugins to be installed and configured.
  *
@@ -1018,7 +727,6 @@ function shouldPreventMouseEvent(name, type, props) {
  * @public
  */
 
- // 注入依赖的方法
 /**
  * Methods for injecting dependencies.
  */
@@ -1040,40 +748,29 @@ var injection = {
  * @param {string} registrationName Name of listener (e.g. `onClick`).
  * @return {?function} The stored callback.
  */
-//  获取监听器
 function getListener(inst, registrationName) {
   var listener = void 0;
-
-  //  TODO: shouldPreventMouseEvent是一个针对特殊DOM的方法，完全不应该
-  //  出现在这里，应该被移到别的地方
 
   // TODO: shouldPreventMouseEvent is DOM-specific and definitely should not
   // live here; needs to be moved to a better place soon
   var stateNode = inst.stateNode;
   if (!stateNode) {
-    //  正在进行中（例如onload事件在增量模式中）
     // Work in progress (ex: onload events in incremental mode).
     return null;
   }
-  //  获取当前节点的属性
   var props = getFiberCurrentPropsFromNode(stateNode);
   if (!props) {
     // Work in progress.
     return null;
   }
   listener = props[registrationName];
-  //  判断是否要阻绝事件传递
   if (shouldPreventMouseEvent(registrationName, inst.type, props)) {
     return null;
   }
-  //  判断是否要返回监听器
-
-  //  预想中的xxx监听器应该是个函数，但是获取到了一个xxx类型的值
   !(!listener || typeof listener === 'function') ? invariant(false, 'Expected `%s` listener to be a function, instead got a value of `%s` type.', registrationName, typeof listener) : void 0;
   return listener;
 }
 
-//  允许注册插件有机会从顶层原生浏览器事件中提取事件
 /**
  * Allows registered plugins an opportunity to extract events from top-level
  * native browser events.
@@ -1083,9 +780,7 @@ function getListener(inst, registrationName) {
  */
 function extractEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget) {
   var events = null;
-  //  遍历所有的插件，把提取到的事件都放在一起
   for (var i = 0; i < plugins.length; i++) {
-    //  并不是所有的排序插件在运行时都会被加载
     // Not every plugin in the ordering may be loaded at runtime.
     var possiblePlugin = plugins[i];
     if (possiblePlugin) {
@@ -1098,15 +793,10 @@ function extractEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget)
   return events;
 }
 
-//  批量运行事件
 function runEventsInBatch(events) {
   if (events !== null) {
-    //  更新事件队列
     eventQueue = accumulateInto(eventQueue, events);
   }
-
-  //  在正式处理前设置事件队列为null，从而使得我们能够区分是否在处理的
-  //  过程中有更多事件入队
 
   // Set `eventQueue` to null before processing it so that we can tell if more
   // events get enqueued while processing.
@@ -1116,17 +806,13 @@ function runEventsInBatch(events) {
   if (!processingEventQueue) {
     return;
   }
-  //  遍历事件队列，执行并且释放
+
   forEachAccumulated(processingEventQueue, executeDispatchesAndReleaseTopLevel);
-  //  如果在执行过程中eventQueue有了新的成员，则报错
-  //  processEventQueue: 在处理事件队列的过程中有新的事件入队，
-  //  当下不支持这种功能
   !!eventQueue ? invariant(false, 'processEventQueue(): Additional events were enqueued while processing an event queue. Support for this has not yet been implemented.') : void 0;
   // This would be a good time to rethrow if any of the event handlers threw.
-  //  如果在事件处理的过程中有报错的话，这是一个重新抛错的好时机
   rethrowCaughtError();
 }
-//  一次跑提取出来的多个事件
+
 function runExtractedEventsInBatch(topLevelType, targetInst, nativeEvent, nativeEventTarget) {
   var events = extractEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget);
   runEventsInBatch(events);
@@ -1134,15 +820,10 @@ function runExtractedEventsInBatch(topLevelType, targetInst, nativeEvent, native
 
 var FunctionComponent = 0;
 var ClassComponent = 1;
-//  在能够判断组件到底是函数组件或者类组件前，其定义为模糊组件
 var IndeterminateComponent = 2; // Before we know whether it is function or class
-//  组件树的根，能够内嵌到其他节点中
 var HostRoot = 3; // Root of a host tree. Could be nested inside another node.
-//  一棵子树，能够成为其他渲染器的入口
 var HostPortal = 4; // A subtree. Could be an entry point to a different renderer.
-//  主组件
 var HostComponent = 5;
-//  文案型根节点
 var HostText = 6;
 var Fragment = 7;
 var Mode = 8;
@@ -1161,7 +842,6 @@ var randomKey = Math.random().toString(36).slice(2);
 var internalInstanceKey = '__reactInternalInstance$' + randomKey;
 var internalEventHandlersKey = '__reactEventHandlers$' + randomKey;
 
-//  预缓存fiber node
 function precacheFiberNode(hostInst, node) {
   node[internalInstanceKey] = hostInst;
 }
@@ -1170,28 +850,23 @@ function precacheFiberNode(hostInst, node) {
  * Given a DOM node, return the closest ReactDOMComponent or
  * ReactDOMTextComponent instance ancestor.
  */
-//  根据一个已知的dom节点，返回最近的reactDom组件或者ReactDOMTextComponent实例的祖先
 function getClosestInstanceFromNode(node) {
   if (node[internalInstanceKey]) {
     return node[internalInstanceKey];
   }
 
-  //  查找带key的节点
   while (!node[internalInstanceKey]) {
     if (node.parentNode) {
       node = node.parentNode;
     } else {
-      //  如果到了树顶，这个节点要么不是react 树的节点，要么没有加载
       // Top of the tree. This node must not be part of a React tree (or is
       // unmounted, potentially).
       return null;
     }
   }
 
-  //  如果这个父节点的tag是固定的类型，返回
   var inst = node[internalInstanceKey];
   if (inst.tag === HostComponent || inst.tag === HostText) {
-    //  在Fiber中，这个永远是最深的根节点
     // In Fiber, this will always be the deepest root.
     return inst;
   }
@@ -1199,13 +874,10 @@ function getClosestInstanceFromNode(node) {
   return null;
 }
 
-//  给一个DOM节点，返回ReactDOMComponent或者ReactDOMTextComponent的实例，
-//  如果这个组件根本没有被渲染的话返回null
 /**
  * Given a DOM node, return the ReactDOMComponent or ReactDOMTextComponent
  * instance, or null if the node was not rendered by this React.
  */
-//  从节点返回实例（react组件）
 function getInstanceFromNode$1(node) {
   var inst = node[internalInstanceKey];
   if (inst) {
@@ -1218,44 +890,33 @@ function getInstanceFromNode$1(node) {
   return null;
 }
 
-//  根据ReactDOMComponent或者ReactDOMTextComponent，返回与之对应的DOM节点
 /**
  * Given a ReactDOMComponent or ReactDOMTextComponent, return the corresponding
  * DOM node.
  */
-//  根据节点（react）返回dom节点
 function getNodeFromInstance$1(inst) {
   if (inst.tag === HostComponent || inst.tag === HostText) {
-    //  在fiber中，这个目前还是状态节点，我们假设它将会变成hose组件或者hose文案
     // In Fiber this, is just the state node right now. We assume it will be
     // a host component or host text.
     return inst.stateNode;
   }
 
-  //  如果没有这个报错的话，传递一个非Dom组价将会触发没有父组件的报错，这很令人疑惑
   // Without this first invariant, passing a non-DOM-component triggers the next
   // invariant for a missing parent, which is super confusing.
   invariant(false, 'getNodeFromInstance: Invalid argument.');
 }
 
-//  从节点中获取当前的fiber属性
 function getFiberCurrentPropsFromNode$1(node) {
   return node[internalEventHandlersKey] || null;
 }
 
-//  更新fiber属性
 function updateFiberProps(node, props) {
   node[internalEventHandlersKey] = props;
 }
 
-//  返回父react节点
 function getParent(inst) {
   do {
     inst = inst.return;
-    //  如果这个跟节点，我们就要退出
-    //  这取决于我们是否想要嵌套子树将事件冒泡到他们的父组件。我们也会
-    //  遍历父主节点节点但是这在reactNative上无效，使得我们无法使用
-    //  portal特性
     // TODO: If this is a HostRoot we might want to bail out.
     // That is depending on if we want nested subtrees (layers) to bubble
     // events to their parent. We could also go through parentNode on the
@@ -1272,9 +933,7 @@ function getParent(inst) {
  * Return the lowest common ancestor of A and B, or null if they are in
  * different trees.
  */
-//  返回两个react实例的最近的共同祖先元素，如果是不同树上的节点，返回null
 function getLowestCommonAncestor(instA, instB) {
-  //  获取两个节点的深度
   var depthA = 0;
   for (var tempA = instA; tempA; tempA = getParent(tempA)) {
     depthA++;
@@ -1284,7 +943,6 @@ function getLowestCommonAncestor(instA, instB) {
     depthB++;
   }
 
-  //  哪个长度长，就先裁剪掉多余的节点
   // If A is deeper, crawl up.
   while (depthA - depthB > 0) {
     instA = getParent(instA);
@@ -1297,15 +955,12 @@ function getLowestCommonAncestor(instA, instB) {
     depthB--;
   }
 
-  //  确定长度一致后，同时开始回溯，必然会遇到共同的节点，这个时候再返回，否则返回null
   // Walk in lockstep until we find a match.
   var depth = depthA;
   while (depth--) {
-    //  实例a等于实例b或者b的代理时，返回
     if (instA === instB || instA === instB.alternate) {
       return instA;
     }
-    //  否则上溯
     instA = getParent(instA);
     instB = getParent(instB);
   }
@@ -1325,20 +980,16 @@ function getLowestCommonAncestor(instA, instB) {
 /**
  * Simulates the traversal of a two-phase, capture/bubble event dispatch.
  */
-//  模拟双相遍历，冒泡和捕捉事件的分发
 function traverseTwoPhase(inst, fn, arg) {
   var path = [];
-  //  获取链上的所有元素
   while (inst) {
     path.push(inst);
     inst = getParent(inst);
   }
   var i = void 0;
-  //  从最后一个元素开始，跑一遍所有的捕获事件
   for (i = path.length; i-- > 0;) {
     fn(path[i], 'captured', arg);
   }
-  //  从第一个元素开始，跑一遍所有的冒泡事件
   for (i = 0; i < path.length; i++) {
     fn(path[i], 'bubbled', arg);
   }
@@ -1351,12 +1002,8 @@ function traverseTwoPhase(inst, fn, arg) {
  * Does not invoke the callback on the nearest common ancestor because nothing
  * "entered" or "left" that element.
  */
-//  遍历id层级，并且在任何需要接收mouseEnter和mouseLeave的id上调用回调函数
-//  在最近的共同祖先上并不需要调用回调因为节点本身没有进入或者离开
 function traverseEnterLeave(from, to, fn, argFrom, argTo) {
-  //  获取共同的父节点
   var common = from && to ? getLowestCommonAncestor(from, to) : null;
-  //  从from节点到公共节点的节点数组
   var pathFrom = [];
   while (true) {
     if (!from) {
@@ -1365,7 +1012,6 @@ function traverseEnterLeave(from, to, fn, argFrom, argTo) {
     if (from === common) {
       break;
     }
-    //  判断代理节点
     var alternate = from.alternate;
     if (alternate !== null && alternate === common) {
       break;
@@ -1388,18 +1034,14 @@ function traverseEnterLeave(from, to, fn, argFrom, argTo) {
     pathTo.push(to);
     to = getParent(to);
   }
-  //  from节点跑一遍冒泡事件
   for (var i = 0; i < pathFrom.length; i++) {
     fn(pathFrom[i], 'bubbled', argFrom);
   }
-  //  to节点跑一遍捕获事件
   for (var _i = pathTo.length; _i-- > 0;) {
     fn(pathTo[_i], 'captured', argTo);
   }
 }
 
-//  一些事件类型在事件传播的不同阶段有不同的登记名，这个方法返回特定状态
-//  的监听器
 /**
  * Some event types have a notion of different registration names for different
  * "phases" of propagation. This finds listeners by a given phase.
@@ -1408,11 +1050,6 @@ function listenerAtPhase(inst, event, propagationPhase) {
   var registrationName = event.dispatchConfig.phasedRegistrationNames[propagationPhase];
   return getListener(inst, registrationName);
 }
-
-//  一个小的传播模式集合，其中的每一个都会接收少量信息，并且产生一个`已经分发号的时间对象`
-//  的集合，该事件集合中的每一个元素都已经被标记了已经分发了监听器的函数或者id.aip这样
-//  设计是为了避免这些传播策略事实上执行了事件分发，因此我们总是收集整个分发事件的集合
-//  尽管事实上只执行单个事件
 
 /**
  * A small set of propagation patterns, each of which will accept a small amount
@@ -1424,34 +1061,23 @@ function listenerAtPhase(inst, event, propagationPhase) {
  * single one.
  */
 
-//  给分发的监听器打上’合成事件‘的标。在这里创建这个函数，使得我们不必绑定或者为每个
-//  事件创建函数。改变事件成员数目使得我们不必创建一个包裹分发对象与事件监听器配对
-
 /**
  * Tags a `SyntheticEvent` with dispatched listeners. Creating this function
  * here, allows us to not have to bind or create functions for each event.
  * Mutating the event's members allows us to not have to create a wrapping
  * "dispatch" object that pairs the event with the listener.
  */
-//  标记一个综合事件，通过分发监听器，合并方向性的分发
-//  phase针对的是状态，具体来说可以是bubble或者catch
 function accumulateDirectionalDispatches(inst, phase, event) {
   {
-    //  分发的实例不能为null
     !inst ? warningWithoutStack$1(false, 'Dispatching inst must not be null') : void 0;
   }
-  //  获取该阶段的监听器
   var listener = listenerAtPhase(inst, event, phase);
   if (listener) {
-    //  监听器聚合和实例聚合
     event._dispatchListeners = accumulateInto(event._dispatchListeners, listener);
     event._dispatchInstances = accumulateInto(event._dispatchInstances, inst);
   }
 }
 
-//  收集分发（在分发之前必须整体收集，见单元测试）。懒分配数组以便保存内存。我们必须
-//  循环遍历每一个事件。我们无法遍历整个事件集合中的每一个元素，因为每个事件都有不同
-//  的目标
 /**
  * Collect dispatches (must be entirely collected before dispatching - see unit
  * tests). Lazily allocate the array to conserve memory.  We must loop through
@@ -1459,22 +1085,17 @@ function accumulateDirectionalDispatches(inst, phase, event) {
  * single traversal for the entire collection of events because each event may
  * have a different target.
  */
-//  在分发前要对事件进行收集，懒分配数组一遍保存内存，必须循环事件并且遍历每一个
 function accumulateTwoPhaseDispatchesSingle(event) {
   if (event && event.dispatchConfig.phasedRegistrationNames) {
-    //  这里的two phase指的是事件冒泡和捕获两种状态
     traverseTwoPhase(event._targetInst, accumulateDirectionalDispatches, event);
   }
 }
 
-//  不考虑方向的合并，并不查找当前状态的登记名。跟accumulateDirectDispatchesSingle
-//  一样但是并不需要dispatchMarker和分发id保持一致
 /**
  * Accumulates without regard to direction, does not look for phased
  * registration names. Same as `accumulateDirectDispatchesSingle` but without
  * requiring that the `dispatchMarker` be the same as the dispatched ID.
  */
-//  聚合分发事件，把注册的事件变成原生事件
 function accumulateDispatches(inst, ignoredDirection, event) {
   if (inst && event && event.dispatchConfig.registrationName) {
     var registrationName = event.dispatchConfig.registrationName;
@@ -1486,7 +1107,6 @@ function accumulateDispatches(inst, ignoredDirection, event) {
   }
 }
 
-//  在合成事件上聚合分发，但是仅仅针对dispatchMarker
 /**
  * Accumulates dispatches on an `SyntheticEvent`, but only for the
  * `dispatchMarker`.
@@ -1498,30 +1118,26 @@ function accumulateDirectDispatchesSingle(event) {
   }
 }
 
-//  聚合双相分发事件，对一个数组中每个元素依次调用方法
 function accumulateTwoPhaseDispatches(events) {
   forEachAccumulated(events, accumulateTwoPhaseDispatchesSingle);
 }
 
-//  遍历进出事件 从起点到终点，经历事件冒泡和事件捕捉
+
+
 function accumulateEnterLeaveDispatches(leave, enter, from, to) {
   traverseEnterLeave(from, to, accumulateDispatches, leave, enter);
 }
 
-//  聚合直接分发事件，只在当前节点触发，入参是数组，只是简单的遍历
-//  这个不区分是冒泡还是捕获
 function accumulateDirectDispatches(events) {
   forEachAccumulated(events, accumulateDirectDispatchesSingle);
 }
 
-//  是否能够使用dom相关api
 var canUseDOM = !!(typeof window !== 'undefined' && window.document && window.document.createElement);
 
 // Do not uses the below two methods directly!
 // Instead use constants exported from DOMTopLevelEventTypes in ReactDOM.
 // (It is the only module that is allowed to access these methods.)
-//  永远不要直接使用这些方法
-//  作为替代，使用ReactDOM中的DOMTopLevelEventTypes来获取
+
 function unsafeCastStringToDOMTopLevelType(topLevelType) {
   return topLevelType;
 }
@@ -1530,7 +1146,6 @@ function unsafeCastDOMTopLevelTypeToString(topLevelType) {
   return topLevelType;
 }
 
-//  建立浏览器厂商前缀和样式属性与事件名之间的映射
 /**
  * Generate a mapping of standard vendor prefixes using the defined style property and event name.
  *
@@ -1551,8 +1166,6 @@ function makePrefixMap(styleProp, eventName) {
 /**
  * A list of event names to a configurable list of vendor prefixes.
  */
-
- // 浏览器兼容 每个属性对应一个map
 var vendorPrefixes = {
   animationend: makePrefixMap('Animation', 'AnimationEnd'),
   animationiteration: makePrefixMap('Animation', 'AnimationIteration'),
@@ -1560,13 +1173,11 @@ var vendorPrefixes = {
   transitionend: makePrefixMap('Transition', 'TransitionEnd')
 };
 
-//  已经被标记且添加前缀的事件名（如果可用）
 /**
  * Event names that have already been detected and prefixed (if applicable).
  */
 var prefixedEventNames = {};
 
-//  判断前缀的元素
 /**
  * Element to check for prefixes on.
  */
@@ -1575,20 +1186,13 @@ var style = {};
 /**
  * Bootstrap if a DOM exists.
  */
-//  dom存在时的引导程序
 if (canUseDOM) {
   style = document.createElement('div').style;
-
-  //  在一些平台上，比如某些版本的安卓4.x系统，animation和transition属性
-  //  在style对象上是没有前缀的，但是被触发时，这些事件名将会有前缀，所以
-  //  我们需要检查非前缀的事件是否可用，如果不是的话将其移除
 
   // On some platforms, in particular some releases of Android 4.x,
   // the un-prefixed "animation" and "transition" properties are defined on the
   // style object but the events that fire will still be prefixed, so we need
   // to check if the un-prefixed events are usable, and if not remove them from the map.
-
-  //  针对特殊系统去除动效前缀
   if (!('AnimationEvent' in window)) {
     delete vendorPrefixes.animationend.animation;
     delete vendorPrefixes.animationiteration.animation;
@@ -1607,12 +1211,9 @@ if (canUseDOM) {
  * @param {string} eventName
  * @returns {string}
  */
-
- // 获取带兼容前缀的事件名
 function getVendorPrefixedEventName(eventName) {
   if (prefixedEventNames[eventName]) {
     return prefixedEventNames[eventName];
-    //  不是那四个特殊属性就直接返回
   } else if (!vendorPrefixes[eventName]) {
     return eventName;
   }
@@ -1621,16 +1222,12 @@ function getVendorPrefixedEventName(eventName) {
 
   for (var styleProp in prefixMap) {
     if (prefixMap.hasOwnProperty(styleProp) && styleProp in style) {
-      //  更新带前缀的事件名
       return prefixedEventNames[eventName] = prefixMap[styleProp];
     }
   }
 
   return eventName;
 }
-
-//  为了识别ReactDom中的顶级事件，我们使用常数去定义这些模块。这是唯一使用unsafeX 方法
-//  去获取真实的浏览器事件的常数。这使得我们通过避免顶层事件到事件名的映射从而节省了一些打包大小
 
 /**
  * To identify top level events in ReactDOM, we use constants defined by this
@@ -1639,7 +1236,6 @@ function getVendorPrefixedEventName(eventName) {
  * us save some bundle size by avoiding a top level type -> event name map.
  * The rest of ReactDOM code should import top level types from this file.
  */
-//  为了识别reactDom中的顶级事件，我们使用常数来定义模块
 var TOP_ABORT = unsafeCastStringToDOMTopLevelType('abort');
 var TOP_ANIMATION_END = unsafeCastStringToDOMTopLevelType(getVendorPrefixedEventName('animationend'));
 var TOP_ANIMATION_ITERATION = unsafeCastStringToDOMTopLevelType(getVendorPrefixedEventName('animationiteration'));
@@ -1723,25 +1319,14 @@ var TOP_VOLUME_CHANGE = unsafeCastStringToDOMTopLevelType('volumechange');
 var TOP_WAITING = unsafeCastStringToDOMTopLevelType('waiting');
 var TOP_WHEEL = unsafeCastStringToDOMTopLevelType('wheel');
 
-//  单独需要被绑定到媒体元素上的事件的列表
-//  注意这个列表里的事件并不会被的顶层监听，除非他们在ReactBrowserEventEmitter.listenTo
-//  这个白名单上
-
 // List of events that need to be individually attached to media elements.
 // Note that events in this list will *not* be listened to at the top level
 // unless they're explicitly whitelisted in `ReactBrowserEventEmitter.listenTo`.
-//  遇上那些事件需要被显示第绑定到媒体元素上
 var mediaEventTypes = [TOP_ABORT, TOP_CAN_PLAY, TOP_CAN_PLAY_THROUGH, TOP_DURATION_CHANGE, TOP_EMPTIED, TOP_ENCRYPTED, TOP_ENDED, TOP_ERROR, TOP_LOADED_DATA, TOP_LOADED_METADATA, TOP_LOAD_START, TOP_PAUSE, TOP_PLAY, TOP_PLAYING, TOP_PROGRESS, TOP_RATE_CHANGE, TOP_SEEKED, TOP_SEEKING, TOP_STALLED, TOP_SUSPEND, TOP_TIME_UPDATE, TOP_VOLUME_CHANGE, TOP_WAITING];
 
-//  获取原始事件名
 function getRawEventName(topLevelType) {
   return unsafeCastDOMTopLevelTypeToString(topLevelType);
 }
-
-//  这些变量存储了目标节点上的文字内容，使得能够比较赋值之前和之后的内容。
-//  识别当前选中态开始的节点位置，之后观察其内部的文字内容和在dom中的位置
-//  .因为浏览器会原生地在比较过程中替换原生节点，我们可以利用这个位置去找到
-//  这个替换
 
 /**
  * These variables store information about text content of a target node,
@@ -1754,27 +1339,23 @@ function getRawEventName(topLevelType) {
  *
  *
  */
-//   这些变量储存某个节点的文字内容
+
 var root = null;
 var startText = null;
 var fallbackText = null;
 
-//  初始化startText
 function initialize(nativeEventTarget) {
   root = nativeEventTarget;
-  //  最开始文案
   startText = getText();
   return true;
 }
 
-//  重置
 function reset() {
   root = null;
   startText = null;
   fallbackText = null;
 }
 
-//  获得兜底文字
 function getData() {
   if (fallbackText) {
     return fallbackText;
@@ -1787,14 +1368,12 @@ function getData() {
   var endValue = getText();
   var endLength = endValue.length;
 
-  //  从0到某个位置字符是一样的
   for (start = 0; start < startLength; start++) {
     if (startValue[start] !== endValue[start]) {
       break;
     }
   }
 
-  //  倒数，从具体某个位置字符是一样的
   var minEnd = startLength - start;
   for (end = 1; end <= minEnd; end++) {
     if (startValue[startLength - end] !== endValue[endLength - end]) {
@@ -1803,7 +1382,6 @@ function getData() {
   }
 
   var sliceTail = end > 1 ? 1 - end : undefined;
-  //  返回中间不一样的部分
   fallbackText = endValue.slice(start, sliceTail);
   return fallbackText;
 }
@@ -1815,25 +1393,25 @@ function getText() {
   return root.textContent;
 }
 
+var ReactInternals = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+
+var _assign = ReactInternals.assign;
+
 /* eslint valid-typeof: 0 */
 
 var EVENT_POOL_SIZE = 10;
 
-//  根据w3的标准实现事件接口
 /**
  * @interface Event
  * @see http://www.w3.org/TR/DOM-Level-3-Events/
  */
-//  事件接口的模型
 var EventInterface = {
   type: null,
   target: null,
-  //  currentTarget是在事件分发的时候被设置的，现在复制在这里没用
   // currentTarget is set when dispatching; no use in copying it here
   currentTarget: function () {
     return null;
   },
-  //  事件状态，捕获或者冒泡
   eventPhase: null,
   bubbles: null,
   cancelable: null,
@@ -1852,13 +1430,6 @@ function functionThatReturnsFalse() {
   return false;
 }
 
-//  合成事件是通过事件插件来分发的，通常是响应顶级事件委托处理程序。
-//  这些系统需要通过事件池来降低垃圾回收的频率。系统需要检查isPersistent
-//  来决定是否应该释放一个已经被分发的事件。用户需要一个持续性的事件
-//  来唤起persist
-
-//  合成事件（及其子类）的实现了DOM 等级3的api,这个过程中磨平了不同浏览器
-//  之间的差异，其子类不必一定要实现DOM接口，自定义特定于应用程序的事件也可以将其子类化。
 /**
  * Synthetic events are dispatched by event plugins, typically in response to a
  * top-level event delegation handler.
@@ -1877,11 +1448,8 @@ function functionThatReturnsFalse() {
  * @param {object} nativeEvent Native browser event.
  * @param {DOMEventTarget} nativeEventTarget Target node.
  */
-
- // 合成事件的构造函数
 function SyntheticEvent(dispatchConfig, targetInst, nativeEvent, nativeEventTarget) {
   {
-    //  这些事件的setter或getter会触发报错
     // these have a getter/setter for warnings
     delete this.nativeEvent;
     delete this.preventDefault;
@@ -1896,12 +1464,10 @@ function SyntheticEvent(dispatchConfig, targetInst, nativeEvent, nativeEventTarg
 
   var Interface = this.constructor.Interface;
   for (var propName in Interface) {
-    //  不是自有属性，就跳过
     if (!Interface.hasOwnProperty(propName)) {
       continue;
     }
     {
-      //  删掉接口属性
       delete this[propName]; // this has a getter/setter for warnings
     }
     var normalize = Interface[propName];
@@ -1915,7 +1481,7 @@ function SyntheticEvent(dispatchConfig, targetInst, nativeEvent, nativeEventTarg
       }
     }
   }
-  // 默认事件阻断
+
   var defaultPrevented = nativeEvent.defaultPrevented != null ? nativeEvent.defaultPrevented : nativeEvent.returnValue === false;
   if (defaultPrevented) {
     this.isDefaultPrevented = functionThatReturnsTrue;
@@ -1926,9 +1492,7 @@ function SyntheticEvent(dispatchConfig, targetInst, nativeEvent, nativeEventTarg
   return this;
 }
 
-//  对合成事件的原型进行assign，自己实现一套event API
 _assign(SyntheticEvent.prototype, {
-  //  屏蔽默认行为
   preventDefault: function () {
     this.defaultPrevented = true;
     var event = this.nativeEvent;
@@ -1936,31 +1500,23 @@ _assign(SyntheticEvent.prototype, {
       return;
     }
 
-    //  如果原生事件有prevent方法的话，就调用原生方法
     if (event.preventDefault) {
       event.preventDefault();
     } else if (typeof event.returnValue !== 'unknown') {
       event.returnValue = false;
     }
-    //  isDefaultPrevented方法设置为返回true
     this.isDefaultPrevented = functionThatReturnsTrue;
   },
 
-  //  停止冒泡
   stopPropagation: function () {
     var event = this.nativeEvent;
     if (!event) {
       return;
     }
-    //  如果是有原生的防冒泡，就调用
+
     if (event.stopPropagation) {
       event.stopPropagation();
-      //  否则手动调用，赋值
     } else if (typeof event.cancelBubble !== 'unknown') {
-      //  ChangeEventPlugin这个插件为IE注册了注册了propertychange这个事件
-      //  这个事件不支持冒泡或者取消，并且任何cancelBubble的引用都会抛出错误
-      //  ,通过类型检查可以规避这个问题
-
       // The ChangeEventPlugin registers a "propertychange" event for
       // IE. This event does not support bubbling or cancelling, and
       // any references to cancelBubble throw "Member not found".  A
@@ -1972,8 +1528,6 @@ _assign(SyntheticEvent.prototype, {
     this.isPropagationStopped = functionThatReturnsTrue;
   },
 
-  //  我们在每个事件循环后将会释放所有的合成事件，并且把它们放回到事件池中，这
-  //  提供了一个能够获取那些不会被放回池子里的事件的引用的途径
   /**
    * We release all dispatched `SyntheticEvent`s after each event loop, adding
    * them back into the pool. This allows a way to hold onto a reference that
@@ -1983,7 +1537,6 @@ _assign(SyntheticEvent.prototype, {
     this.isPersistent = functionThatReturnsTrue;
   },
 
-  //  检查这个事件是否需要被释放回池子里
   /**
    * Checks if this event should be released back into the pool.
    *
@@ -1991,16 +1544,13 @@ _assign(SyntheticEvent.prototype, {
    */
   isPersistent: functionThatReturnsFalse,
 
-  //  事件池在每个事件被释放是都会运行destructor
   /**
    * `PooledClass` looks for `destructor` on each instance it releases.
    */
   destructor: function () {
     var Interface = this.constructor.Interface;
-    //  遍历interface中的每个属性
     for (var propName in Interface) {
       {
-        //  获取聚合的警告属性的定义
         Object.defineProperty(this, propName, getPooledWarningPropertyDefinition(propName, Interface[propName]));
       }
     }
@@ -2011,7 +1561,6 @@ _assign(SyntheticEvent.prototype, {
     this.isPropagationStopped = functionThatReturnsFalse;
     this._dispatchListeners = null;
     this._dispatchInstances = null;
-    //  以下这些属性页设置get和set warning
     {
       Object.defineProperty(this, 'nativeEvent', getPooledWarningPropertyDefinition('nativeEvent', null));
       Object.defineProperty(this, 'isDefaultPrevented', getPooledWarningPropertyDefinition('isDefaultPrevented', functionThatReturnsFalse));
@@ -2024,8 +1573,6 @@ _assign(SyntheticEvent.prototype, {
 
 SyntheticEvent.Interface = EventInterface;
 
-//  帮助在创建子类的时候减少样板文件引用
-//  提供扩展函数
 /**
  * Helper to reduce boilerplate when creating subclasses.
  */
@@ -2036,7 +1583,6 @@ SyntheticEvent.extend = function (Interface) {
   E.prototype = Super.prototype;
   var prototype = new E();
 
-  //  一个工具类
   function Class() {
     return Super.apply(this, arguments);
   }
@@ -2046,7 +1592,6 @@ SyntheticEvent.extend = function (Interface) {
 
   Class.Interface = _assign({}, Super.Interface, Interface);
   Class.extend = Super.extend;
-  //  给这个类添加事件池
   addEventPoolingTo(Class);
 
   return Class;
@@ -2054,7 +1599,6 @@ SyntheticEvent.extend = function (Interface) {
 
 addEventPoolingTo(SyntheticEvent);
 
-//  在实例摧毁的时候帮助使合成事件作废
 /**
  * Helper to nullify syntheticEvent instance properties when destructing
  *
@@ -2062,9 +1606,7 @@ addEventPoolingTo(SyntheticEvent);
  * @param {?object} getVal
  * @return {object} defineProperty object
  */
-//  获取属性配置符的对象
 function getPooledWarningPropertyDefinition(propName, getVal) {
-  //  判断是设置属性值还是方法
   var isFunction = typeof getVal === 'function';
   return {
     configurable: true,
@@ -2091,33 +1633,25 @@ function getPooledWarningPropertyDefinition(propName, getVal) {
   }
 }
 
-//  获取进入事件池的事件
 function getPooledEvent(dispatchConfig, targetInst, nativeEvent, nativeInst) {
   var EventConstructor = this;
-  //  如果事件构造器的实例有，那么就调用并返回
   if (EventConstructor.eventPool.length) {
     var instance = EventConstructor.eventPool.pop();
-    //  调用构造函数
     EventConstructor.call(instance, dispatchConfig, targetInst, nativeEvent, nativeInst);
     return instance;
   }
-  //  否则使用默认的事件构造器
   return new EventConstructor(dispatchConfig, targetInst, nativeEvent, nativeInst);
 }
 
-//  释放聚合事件
 function releasePooledEvent(event) {
   var EventConstructor = this;
-  //  报错：尝试释放一个与事件池内事件类型不同的事件实例
   !(event instanceof EventConstructor) ? invariant(false, 'Trying to release an event instance into a pool of a different type.') : void 0;
   event.destructor();
-  //  小于上限就推一个事件进池子
   if (EventConstructor.eventPool.length < EVENT_POOL_SIZE) {
     EventConstructor.eventPool.push(event);
   }
 }
 
-//  给一个事件的构造器添加事件池子
 function addEventPoolingTo(EventConstructor) {
   EventConstructor.eventPool = [];
   EventConstructor.getPooled = getPooledEvent;
@@ -2128,7 +1662,6 @@ function addEventPoolingTo(EventConstructor) {
  * @interface Event
  * @see http://www.w3.org/TR/DOM-Level-3-Events/#events-compositionevents
  */
-//  通过extend获得改造的合成事件
 var SyntheticCompositionEvent = SyntheticEvent.extend({
   data: null
 });
@@ -2138,16 +1671,13 @@ var SyntheticCompositionEvent = SyntheticEvent.extend({
  * @see http://www.w3.org/TR/2013/WD-DOM-Level-3-Events-20131105
  *      /#events-inputevents
  */
-//  合成的输入事件
 var SyntheticInputEvent = SyntheticEvent.extend({
   data: null
 });
 
-//  某些特殊的键值
 var END_KEYCODES = [9, 13, 27, 32]; // Tab, Return, Esc, Space
 var START_KEYCODE = 229;
 
-//  能否使用合成事件
 var canUseCompositionEvent = canUseDOM && 'CompositionEvent' in window;
 
 var documentMode = null;
@@ -2155,19 +1685,10 @@ if (canUseDOM && 'documentMode' in document) {
   documentMode = document.documentMode;
 }
 
-//  webkit提供了非常有用的`textInput`事件，能够用来直接表现`beforeInput`
-//  事件。IE浏览器的tetInput么有那么好用，这里放弃
-
-//  这里带一嘴，documentMode是IE浏览器的专属属性，可以用来判断浏览器内核
-//  https://www.runoob.com/jsref/prop-doc-documentmode.html
-
 // Webkit offers a very useful `textInput` event that can be used to
 // directly represent `beforeInput`. The IE `textinput` event is not as
 // useful, so we don't use it.
 var canUseTextInputEvent = canUseDOM && 'TextEvent' in window && !documentMode;
-
-//  在IE9+中，我们接触到合成事件，但是由原生合成事件提供的数据可能不正确。日文的
-//  ideographic空格不会被正确记录
 
 // In IE9+, we have access to composition events, but the data supplied
 // by the native compositionend event may be incorrect. Japanese ideographic
@@ -2178,10 +1699,8 @@ var SPACEBAR_CODE = 32;
 var SPACEBAR_CHAR = String.fromCharCode(SPACEBAR_CODE);
 
 // Events and their corresponding property names.
-//  事件和他们对应的属性名
 var eventTypes = {
   beforeInput: {
-    //  区分冒泡和捕获阶段的事件登记名
     phasedRegistrationNames: {
       bubbled: 'onBeforeInput',
       captured: 'onBeforeInputCapture'
@@ -2211,37 +1730,26 @@ var eventTypes = {
   }
 };
 
-//  追踪我们是否处理了空格键的摁下操作
-
 // Track whether we've ever handled a keypress on the space key.
 var hasSpaceKeypress = false;
 
-//  判断原生的摁键事件是否被作为一个命令，返回bool值。
-//  这是因为火狐浏览器触发摁键事件作为摁键命令（如复制粘贴，全选等），尽管
-//  此时并没有字符被插入
 /**
  * Return whether a native keypress event is assumed to be a command.
  * This is required because Firefox fires `keypress` events for key commands
  * (cut, copy, select-all, etc.) even though no character is inserted.
  */
-//  判断是否是真实地摁键事件而不是操作指令
 function isKeypressCommand(nativeEvent) {
   return (nativeEvent.ctrlKey || nativeEvent.altKey || nativeEvent.metaKey) &&
-  //  ctrl+alt等于右alt,这个并不是命令
-  //  解释下啥是AltGr https://zhidao.baidu.com/question/1277950.html
-
   // ctrlKey && altKey is equivalent to AltGr, and is not a command.
   !(nativeEvent.ctrlKey && nativeEvent.altKey);
 }
 
-//  将顶层事件转化为事件类型
 /**
  * Translate native top level events into event types.
  *
  * @param {string} topLevelType
  * @return {object}
  */
-//  获取合成事件的类型
 function getCompositionEventType(topLevelType) {
   switch (topLevelType) {
     case TOP_COMPOSITION_START:
@@ -2261,12 +1769,10 @@ function getCompositionEventType(topLevelType) {
  * @param {object} nativeEvent
  * @return {boolean}
  */
-//  我们的兜底最佳猜测模型认为这个事件表示合成的开始么？
 function isFallbackCompositionStart(topLevelType, nativeEvent) {
   return topLevelType === TOP_KEY_DOWN && nativeEvent.keyCode === START_KEYCODE;
 }
 
-//  我们的兜底模式是否认为这个事件是合成的结尾
 /**
  * Does our fallback mode think that this event is the end of composition?
  *
@@ -2277,30 +1783,21 @@ function isFallbackCompositionStart(topLevelType, nativeEvent) {
 function isFallbackCompositionEnd(topLevelType, nativeEvent) {
   switch (topLevelType) {
     case TOP_KEY_UP:
-      //  指令键插入或者清空输入法编辑器
       // Command keys insert or clear IME input.
       return END_KEYCODES.indexOf(nativeEvent.keyCode) !== -1;
     case TOP_KEY_DOWN:
-      //  在每个键摁下后期望获得输入法编辑器的键码，如果获得了其他键码
-      //  我们就应该早点退出
-
       // Expect IME keyCode on each keydown. If we get any other
       // code we must have exited earlier.
       return nativeEvent.keyCode !== START_KEYCODE;
     case TOP_KEY_PRESS:
     case TOP_MOUSE_DOWN:
     case TOP_BLUR:
-      //  事件不可能在没有唤起输入法编辑器的情况下发生
       // Events are not possible without cancelling IME.
       return true;
     default:
       return false;
   }
 }
-
-//  谷歌输入工具通过自定义事件提供了合成的数据，其在detail对象的data属性中
-//  如果这个属性在事件对象上可用，就用。如果不行，这就是一个空白的合成事件，
-//  我们并没有什么东西好提取
 
 /**
  * Google Input Tools provides composition data via a CustomEvent,
@@ -2319,10 +1816,6 @@ function getDataFromCustomEvent(nativeEvent) {
   return null;
 }
 
-//  检查合成事件是否由韩语输入法编辑器触发，我们的兜底模式在韩国
-//  的IE浏览器输入法下工作的不太好。所以如果使用了韩语输入法编辑器
-//  我们就是用原生的合成事件。尽管CompositionEvent.locale这个属性
-//  被废弃了，但是它在ie中依然可用，此时我们启用了兜底模式
 /**
  * Check if a composition event was triggered by Korean IME.
  * Our fallback mode does not work well with IE's Korean IME,
@@ -2333,75 +1826,59 @@ function getDataFromCustomEvent(nativeEvent) {
  * @param {object} nativeEvent
  * @return {boolean}
  */
-//  是否在使用韩国输入法编辑器
 function isUsingKoreanIME(nativeEvent) {
   return nativeEvent.locale === 'ko';
 }
 
-//  追踪当前输入法编辑器合成事件状态
 // Track the current IME composition status, if any.
 var isComposing = false;
 
 /**
  * @return {?object} A SyntheticCompositionEvent.
  */
-//  提取合成事件
 function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEventTarget) {
   var eventType = void 0;
   var fallbackData = void 0;
 
-  //  如果能够合成事件，返回合成事件类型
   if (canUseCompositionEvent) {
     eventType = getCompositionEventType(topLevelType);
-    //  如果不在合成，那么就返回合成事件的开始类型
   } else if (!isComposing) {
-    //  如果是兜底的合成开始
     if (isFallbackCompositionStart(topLevelType, nativeEvent)) {
       eventType = eventTypes.compositionStart;
     }
-    //  返回结束的合成事件类型
   } else if (isFallbackCompositionEnd(topLevelType, nativeEvent)) {
     eventType = eventTypes.compositionEnd;
   }
 
-  //  如果事件类型还没有的话，直接返回空
   if (!eventType) {
     return null;
   }
 
-  //  如果可以使用回调的组合事件
   if (useFallbackCompositionData && !isUsingKoreanIME(nativeEvent)) {
-    //  当前的合成是被静态存储的，在合成的过程中不允许被重写
     // The current composition is stored statically and must not be
     // overwritten while composition continues.
     if (!isComposing && eventType === eventTypes.compositionStart) {
-      //  如果不是正在合成并且事件类型是开始合成，进行初始化并且状态变为true
       isComposing = initialize(nativeEventTarget);
     } else if (eventType === eventTypes.compositionEnd) {
       if (isComposing) {
-        //  如果事件类型是合成结束且正在合成
         fallbackData = getData();
       }
     }
   }
 
-  //  获得进入事件池的事件
   var event = SyntheticCompositionEvent.getPooled(eventType, targetInst, nativeEvent, nativeEventTarget);
 
-  //  如果有回调数据，就赋值到事件上
   if (fallbackData) {
     // Inject data generated from fallback path into the synthetic event.
     // This matches the property of native CompositionEventInterface.
     event.data = fallbackData;
   } else {
-    //  使用自定义事件的数据
     var customData = getDataFromCustomEvent(nativeEvent);
     if (customData !== null) {
       event.data = customData;
     }
   }
 
-  //  遍历所有事件并调用回调
   accumulateTwoPhaseDispatches(event);
   return event;
 }
@@ -2411,17 +1888,11 @@ function extractCompositionEvent(topLevelType, targetInst, nativeEvent, nativeEv
  * @param {object} nativeEvent Native browser event.
  * @return {?string} The string corresponding to this `beforeInput` event.
  */
-//  获取原生BeforeInput的键
 function getNativeBeforeInputChars(topLevelType, nativeEvent) {
   switch (topLevelType) {
     case TOP_COMPOSITION_END:
       return getDataFromCustomEvent(nativeEvent);
     case TOP_KEY_PRESS:
-      //  如果原生的textInput事件可用，我们的目标是充分利用他们。但是这里有特殊情况：
-      //  那就是空格键，在webkit中，要避免空格键的textInput事件取消字符的插入的moren
-      //  行为，但是这有触发了浏览器滚动页面的默认行为，为了避免这个问题，我们
-      //  使用只有在没有可用的textInput事件时才会使用摁键事件
-  
       /**
        * If native `textInput` events are available, our goal is to make
        * use of them. However, there is a special case: the spacebar key.
@@ -2436,7 +1907,6 @@ function getNativeBeforeInputChars(topLevelType, nativeEvent) {
        * To avoid this issue, use the keypress event as if no `textInput`
        * event is available.
        */
-      //  针对摁键行为，如果不是空格的话就直接返回
       var which = nativeEvent.which;
       if (which !== SPACEBAR_CODE) {
         return null;
@@ -2446,13 +1916,9 @@ function getNativeBeforeInputChars(topLevelType, nativeEvent) {
       return SPACEBAR_CHAR;
 
     case TOP_TEXT_INPUT:
-      //  记录添加到DOM中的字符
       // Record the characters to be added to the DOM.
       var chars = nativeEvent.data;
 
-      //  如果是空格键，假定我们已经在摁键阶段处理并且立即释放了事件，安卓下的
-      //  chrome并没有给我们键码，所以我们需要忽略它
-  
       // If it's a spacebar character, assume that we have already handled
       // it at the keypress level and bail immediately. Android Chrome
       // doesn't give us keycodes, so we need to ignore it.
@@ -2463,14 +1929,11 @@ function getNativeBeforeInputChars(topLevelType, nativeEvent) {
       return chars;
 
     default:
-      //  对于其他的原生事件类型，啥也不做
-
       // For other native event types, do nothing.
       return null;
   }
 }
 
-//  针对不支持textInput事件的浏览器，这里提取合适的字符串提供给合成的输入事件
 /**
  * For browsers that do not provide the `textInput` event, extract the
  * appropriate string to use for SyntheticInputEvent.
@@ -2480,17 +1943,12 @@ function getNativeBeforeInputChars(topLevelType, nativeEvent) {
  * @return {?string} The fallback string for this `beforeInput` event.
  */
 function getFallbackBeforeInputChars(topLevelType, nativeEvent) {
-  //  如果我们正在构造输入法编辑器并在使用兜底，尝试从兜底对象中提取构造的
-  //  字符串。如果构造事件可用，我们就只在合成事件中提取字符串，否则的话从
-  //  兜底对象中提取
-
   // If we are currently composing (IME) and using a fallback to do so,
   // try to extract the composed characters from the fallback object.
   // If composition event is available, we extract a string only at
   // compositionevent, otherwise extract it at fallback events.
   if (isComposing) {
     if (topLevelType === TOP_COMPOSITION_END || !canUseCompositionEvent && isFallbackCompositionEnd(topLevelType, nativeEvent)) {
-      //  获取输入的字符
       var chars = getData();
       reset();
       isComposing = false;
@@ -2501,22 +1959,10 @@ function getFallbackBeforeInputChars(topLevelType, nativeEvent) {
 
   switch (topLevelType) {
     case TOP_PASTE:
-      //  如果在摁键后发生了粘贴事件，抛出出入字符串。粘贴事件不应该引导
-      //  BeforeInput事件
-
       // If a paste event occurs after a keypress, throw out the input
       // chars. Paste events should not lead to BeforeInput events.
       return null;
     case TOP_KEY_PRESS:
-      //  针对v27版本，fireFox浏览器会在没有字符插入时触发摁键事件，有以下几种可能性
-      //  如果which是0，可能是箭头键，esc键等等
-
-      //  如果which是摁键键码，但是并没有可用的字符，比如altGr + d在波兰语中
-      //  ,这种情况下没有支持的字符针对这种键的组合并且没有字符插入到文档中，在这种情况下
-      //  火狐浏览器还是会触发键码为100的摁键事件，此时并没有input事件发生
-
-      //  如果which是摁键键码，但是实在使用组合组合命令键，例如cmd+c,测试没有字符被插入，也
-      //  不会有input事件触发
       /**
        * As of v27, Firefox may fire keypress events even when no character
        * will be inserted. A few possibilities:
@@ -2533,19 +1979,13 @@ function getFallbackBeforeInputChars(topLevelType, nativeEvent) {
        *   being used. Ex: `Cmd+C`. No character is inserted, and no
        *   `input` event will occur.
        */
-      //  判断是否是摁键指令
       if (!isKeypressCommand(nativeEvent)) {
-        //  IE浏览器在windows下由触摸键盘输入表情，在这种情况下，表情符号的char属性
-        //  可能类似于\uD83D\uDE0A，因为其长度为2，此时的which并不直接代表表情，
-        //  此时我们直接返回char属性而不是which
-
         // IE fires the `keypress` event when a user types an emoji via
         // Touch keyboard of Windows.  In such a case, the `char` property
         // holds an emoji character like `\uD83D\uDE0A`.  Because its length
         // is 2, the property `which` does not represent an emoji correctly.
         // In such a case, we directly return the `char` property instead of
         // using `which`.
-        //  如果是ie的emoji，采用特殊的方法
         if (nativeEvent.char && nativeEvent.char.length > 1) {
           return nativeEvent.char;
         } else if (nativeEvent.which) {
@@ -2566,11 +2006,9 @@ function getFallbackBeforeInputChars(topLevelType, nativeEvent) {
  *
  * @return {?object} A SyntheticInputEvent.
  */
-//  提取出beforeInput的合成输入事件
 function extractBeforeInputEvent(topLevelType, targetInst, nativeEvent, nativeEventTarget) {
   var chars = void 0;
 
-  //  首先提取输入字符，如果不存在直接返回
   if (canUseTextInputEvent) {
     chars = getNativeBeforeInputChars(topLevelType, nativeEvent);
   } else {
@@ -2582,26 +2020,14 @@ function extractBeforeInputEvent(topLevelType, targetInst, nativeEvent, nativeEv
   if (!chars) {
     return null;
   }
-  // 获取事件，本质是通过构造方法返回一个实例
+
   var event = SyntheticInputEvent.getPooled(eventTypes.beforeInput, targetInst, nativeEvent, nativeEventTarget);
-  //  添加数据
+
   event.data = chars;
-  //  遍历并返回
   accumulateTwoPhaseDispatches(event);
   return event;
 }
 
-//  创建一个onBeforeInput来匹配
-//  这个时间插件在chrome,safari,opera,和IE等浏览器中是通过原生
-//  textInput时间来实现的，这个时间在onKeyPress，onCompositionEnd
-//  发生之后触发，onInput在onInput时间触发之前发生
-
-//  beforeInput是spec'd但是并没有在任何浏览器中实现，并且input时间并没有提供
-//  任何关于真正被添加的字符的信息，与规范相悖。因此textInput是最好的
-//  能够用来识别我们实际输出到目标节点的事件
-
-//  这个插件负责触发合成事件，因此允许我们分享合成事件的兜底代码来
-//  处理beforeInput和composition类型的事件
 /**
  * Create an `onBeforeInput` event to match
  * http://www.w3.org/TR/2013/WD-DOM-Level-3-Events-20131105/#events-inputevents.
@@ -2620,8 +2046,6 @@ function extractBeforeInputEvent(topLevelType, targetInst, nativeEvent, nativeEv
  * allowing us to share composition fallback code for both `beforeInput` and
  * `composition` event types.
  */
-
- // 
 var BeforeInputEventPlugin = {
   eventTypes: eventTypes,
 
@@ -2642,7 +2066,6 @@ var BeforeInputEventPlugin = {
   }
 };
 
-//  以下这些用来在改变事件触发之后储存状态
 // Use to restore controlled state after a change event has fired.
 
 var restoreImpl = null;
@@ -2650,8 +2073,6 @@ var restoreTarget = null;
 var restoreQueue = null;
 
 function restoreStateOfTarget(target) {
-  //  我们在事件循环的最后进行状态的改变，使得我们总是能够收到正确的fiber
-  
   // We perform this translation at the end of the event loop so that we
   // always receive the correct fiber here
   var internalInstance = getInstanceFromNode(target);
@@ -2659,19 +2080,15 @@ function restoreStateOfTarget(target) {
     // Unmounted
     return;
   }
-  //  如果restoreImpl不是函数，告警：setRestoreImplementation需要在受控事件上被调用，这个错误
-  //  可能是react内部bug，请提issue
   !(typeof restoreImpl === 'function') ? invariant(false, 'setRestoreImplementation() needs to be called to handle a target for controlled events. This error is likely caused by a bug in React. Please file an issue.') : void 0;
   var props = getFiberCurrentPropsFromNode(internalInstance.stateNode);
   restoreImpl(internalInstance.stateNode, internalInstance.type, props);
 }
 
-//  设置restoreImpl的实现方法
 function setRestoreImplementation(impl) {
   restoreImpl = impl;
 }
 
-//  入队状态存储
 function enqueueStateRestore(target) {
   if (restoreTarget) {
     if (restoreQueue) {
@@ -2684,12 +2101,10 @@ function enqueueStateRestore(target) {
   }
 }
 
-//  是否需要状态存储
 function needsStateRestore() {
   return restoreTarget !== null || restoreQueue !== null;
 }
 
-//  如果需要的话，存储状态
 function restoreStateIfNeeded() {
   if (!restoreTarget) {
     return;
@@ -2699,7 +2114,6 @@ function restoreStateIfNeeded() {
   restoreTarget = null;
   restoreQueue = null;
 
-  //  restoreTarget和restoreQueue都存
   restoreStateOfTarget(target);
   if (queuedTargets) {
     for (var i = 0; i < queuedTargets.length; i++) {
@@ -2708,35 +2122,24 @@ function restoreStateIfNeeded() {
   }
 }
 
-//  当我们无法获取渲染器引用的时候，提供一个方法给我们调用批量更新
-//  例如当我们分发事件或者第三方库需要调用批量更新的时候。事实上，
-//  当所有的事件都被默认批量化的时候，这个api将会被剔除。然后我们将有一个类似
-//  的API来选择不执行计划的工作，而是执行同步工作。
-
 // Used as a way to call batchedUpdates when we don't have a reference to
 // the renderer. Such as when we're dispatching events or if third party
 // libraries need to call batchedUpdates. Eventually, this API will go away when
 // everything is batched by default. We'll then have a similar API to opt-out of
 // scheduled work and instead do synchronous work.
 
-//  默认行为
 // Defaults
-//  批量更新的实现
 var _batchedUpdatesImpl = function (fn, bookkeeping) {
   return fn(bookkeeping);
 };
-//  交互的更新实现
 var _interactiveUpdatesImpl = function (fn, a, b) {
   return fn(a, b);
 };
-//  flush交互的更新实现
 var _flushInteractiveUpdatesImpl = function () {};
 
 var isBatching = false;
 function batchedUpdates(fn, bookkeeping) {
   if (isBatching) {
-    //  如果我们正在其他批量任务中，我们需要等待，直到在重新存储状态前
-    //  完全完成
     // If we are currently inside another batch, we need to wait until it
     // fully completes before restoring state.
     return fn(bookkeeping);
@@ -2745,8 +2148,6 @@ function batchedUpdates(fn, bookkeeping) {
   try {
     return _batchedUpdatesImpl(fn, bookkeeping);
   } finally {
-    //  在这里我们等待所有更新都传播之后再存储所有受控组件的状态，这在
-    //  layer中使用受控组件是非常重要的
     // Here we wait until all updates have propagated, which is important
     // when using controlled components within layers:
     // https://github.com/facebook/react/issues/1698
@@ -2754,8 +2155,6 @@ function batchedUpdates(fn, bookkeeping) {
     isBatching = false;
     var controlledComponentsHavePendingUpdates = needsStateRestore();
     if (controlledComponentsHavePendingUpdates) {
-      //  如果一个受控事件触发，我们需要重置dom节点的状态到受控的值
-      //  这在react退出更新并且没有接触doms时非常重要
       // If a controlled event was fired, we may need to restore the state of
       // the DOM node back to the controlled value. This is necessary when React
       // bails out of the update without touching the DOM.
@@ -2770,7 +2169,7 @@ function interactiveUpdates(fn, a, b) {
 }
 
 
-//  设置批量更新的实现
+
 function setBatchingImplementation(batchedUpdatesImpl, interactiveUpdatesImpl, flushInteractiveUpdatesImpl) {
   _batchedUpdatesImpl = batchedUpdatesImpl;
   _interactiveUpdatesImpl = interactiveUpdatesImpl;
@@ -2780,7 +2179,6 @@ function setBatchingImplementation(batchedUpdatesImpl, interactiveUpdatesImpl, f
 /**
  * @see http://www.whatwg.org/specs/web-apps/current-work/multipage/the-input-element.html#input-type-attr-summary
  */
-//  支持的输入类型
 var supportedInputTypes = {
   color: true,
   date: true,
@@ -2799,7 +2197,6 @@ var supportedInputTypes = {
   week: true
 };
 
-//  是否是文字输入组件
 function isTextInputElement(elem) {
   var nodeName = elem && elem.nodeName && elem.nodeName.toLowerCase();
 
@@ -2814,7 +2211,6 @@ function isTextInputElement(elem) {
   return false;
 }
 
-//  html节点类型代表的节点
 /**
  * HTML nodeType values that represent the type of the node
  */
@@ -2825,7 +2221,6 @@ var COMMENT_NODE = 8;
 var DOCUMENT_NODE = 9;
 var DOCUMENT_FRAGMENT_NODE = 11;
 
-//  通过统计浏览器dom api中的不一致性，我们可以从原生浏览器获取节点
 /**
  * Gets the target node from a native browser event by accounting for
  * inconsistencies in browser DOM APIs.
@@ -2834,25 +2229,20 @@ var DOCUMENT_FRAGMENT_NODE = 11;
  * @return {DOMEventTarget} Target node.
  */
 function getEventTarget(nativeEvent) {
-  //  针对ie9浏览器nativeEvent.srcElement的兜底
   // Fallback to nativeEvent.srcElement for IE9
   // https://github.com/facebook/react/issues/12506
   var target = nativeEvent.target || nativeEvent.srcElement || window;
 
-  //  标准化svg元素事件
   // Normalize SVG <use> element events #4963
   if (target.correspondingUseElement) {
     target = target.correspondingUseElement;
   }
 
-  //  safari可能在下一个text节点上触发事件
   // Safari may fire events on text nodes (Node.TEXT_NODE is 3).
   // @see http://www.quirksmode.org/js/events_properties.html
   return target.nodeType === TEXT_NODE ? target.parentNode : target;
 }
 
-//  判断一个事件是否支持当下的执行环境
-//  注意，这个对于非统称的事件，例如chagen,reset,load,error等无效
 /**
  * Checks if an event is supported in the current execution environment.
  *
@@ -2872,11 +2262,9 @@ function isEventSupported(eventNameSuffix) {
   }
 
   var eventName = 'on' + eventNameSuffix;
-  //  先判断document上是否支持
   var isSupported = eventName in document;
-  //  如果不支持
+
   if (!isSupported) {
-    //  构造div，看是否支持
     var element = document.createElement('div');
     element.setAttribute(eventName, 'return;');
     isSupported = typeof element[eventName] === 'function';
@@ -2885,28 +2273,26 @@ function isEventSupported(eventNameSuffix) {
   return isSupported;
 }
 
-//  是否是check类型的input
 function isCheckable(elem) {
   var type = elem.type;
   var nodeName = elem.nodeName;
   return nodeName && nodeName.toLowerCase() === 'input' && (type === 'checkbox' || type === 'radio');
 }
-//  获取追踪器
+
 function getTracker(node) {
   return node._valueTracker;
 }
-//  重置追踪器
+
 function detachTracker(node) {
   node._valueTracker = null;
 }
-//  从节点中获取值
+
 function getValueFromNode(node) {
   var value = '';
   if (!node) {
     return value;
   }
 
-  //  根据是否是check类型的输入来确定返回内容
   if (isCheckable(node)) {
     value = node.checked ? 'true' : 'false';
   } else {
@@ -2916,18 +2302,11 @@ function getValueFromNode(node) {
   return value;
 }
 
-//  追踪节点上的值
 function trackValueOnNode(node) {
-  //  判断值的属性是checked还是value
   var valueField = isCheckable(node) ? 'checked' : 'value';
-  //  获取这个属性的属性描述符
   var descriptor = Object.getOwnPropertyDescriptor(node.constructor.prototype, valueField);
-  //  当前的值
-  var currentValue = '' + node[valueField];
 
-  //  如果已经定义了value或者是safari浏览器，这个时候停止并且不再追踪值，
-  //  这会触发过多的变更上报，但是这也好过一个抛错
-  //  在某些测试中需要spyOn输入值和Safari
+  var currentValue = '' + node[valueField];
 
   // if someone has already defined a value or Safari, then bail
   // and don't track value will cause over reporting of changes,
@@ -2949,9 +2328,6 @@ function trackValueOnNode(node) {
       set.call(this, value);
     }
   });
-  //  我们也曾尝试在第一次定义的时候传入enumerable，但是这在
-  //  IE11和Edge14/15中会有报错，再次调用defineProperty从效果上
-  //  是一样的
   // We could've passed this the first time
   // but it triggers a bug in IE11 and Edge 14/15.
   // Calling defineProperty() again should be equivalent.
@@ -2976,23 +2352,20 @@ function trackValueOnNode(node) {
 }
 
 function track(node) {
-  //  如果有tracker直接返回
   if (getTracker(node)) {
     return;
   }
 
-  //  一旦这个只是fiber，我们可以将它移动到node._wrapperState
   // TODO: Once it's just Fiber we can move this to node._wrapperState
   node._valueTracker = trackValueOnNode(node);
 }
-//  在改变的时候是否更新值
+
 function updateValueIfChanged(node) {
   if (!node) {
     return false;
   }
 
   var tracker = getTracker(node);
-  //  如果在这个时候没有tracker,那么重试也不大可能成功
   // if there is no tracker at this point it's unlikely
   // that trying again will succeed
   if (!tracker) {
@@ -3001,18 +2374,15 @@ function updateValueIfChanged(node) {
 
   var lastValue = tracker.getValue();
   var nextValue = getValueFromNode(node);
-  //  如果新旧值不一致，那么就置tracker的值
   if (nextValue !== lastValue) {
     tracker.setValue(nextValue);
     return true;
   }
   return false;
 }
-//  react内部的共享变量
+
 var ReactSharedInternals = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
-//  当与旧的react包版本一起使用时，禁止从运行环境（rte）中使用较新的渲染器。
-//  当前的所有者和分发者过去式使用同一个ref的，但是pull-request14548把他们分开了
-//  以便获取更好的对react开发者工具的支持
+
 // Prevent newer renderers from RTE when used with older react package versions.
 // Current owner and dispatcher used to share the same ref,
 // but PR #14548 split them out to better support the react-debug-tools package.
@@ -3022,45 +2392,34 @@ if (!ReactSharedInternals.hasOwnProperty('ReactCurrentDispatcher')) {
   };
 }
 
-//  正则，匹配任意内容加正反斜杆
-//  括号内的内容是分组 https://www.jianshu.com/p/f09508c14e65
-//  match如果是全局匹配，返回的是所有的匹配项，如果不是返回的是匹配字符串，位置，原始输入，如果有分组，第二项是匹配的分组
 var BEFORE_SLASH_RE = /^(.*)[\\\/]/;
-//  描述组件的引用位置
+
 var describeComponentFrame = function (name, source, ownerName) {
   var sourceInfo = '';
   if (source) {
     var path = source.fileName;
-    //  解析出文件名
     var fileName = path.replace(BEFORE_SLASH_RE, '');
     {
       // In DEV, include code for a common special case:
       // prefer "folder/index.js" instead of just "index.js".
-      //  在开发环境下，如果文件名为index 输出带上一级路径的文件名
       if (/^index\./.test(fileName)) {
-        //  解析出反斜杠前的文件名
         var match = path.match(BEFORE_SLASH_RE);
         if (match) {
           var pathBeforeSlash = match[1];
           if (pathBeforeSlash) {
-            //  获得文件名前的文件夹的名字
             var folderName = pathBeforeSlash.replace(BEFORE_SLASH_RE, '');
             fileName = folderName + '/' + fileName;
           }
         }
       }
     }
-    //  获取最近的文件夹名和文件名，拼上代码行数
     sourceInfo = ' (at ' + fileName + ':' + source.lineNumber + ')';
   } else if (ownerName) {
     sourceInfo = ' (created by ' + ownerName + ')';
   }
-
   return '\n    in ' + (name || 'Unknown') + sourceInfo;
 };
 
-//  Symbol通常用来标识React元素的类型，如果不支持原生Symbol或者没有兼容方案，
-//  出于性能考虑直接使用数字来标识
 // The Symbol used to tag the ReactElement-like types. If there is no native Symbol
 // nor polyfill, then a plain number is used for performance.
 var hasSymbol = typeof Symbol === 'function' && Symbol.for;
@@ -3082,7 +2441,6 @@ var REACT_LAZY_TYPE = hasSymbol ? Symbol.for('react.lazy') : 0xead4;
 var MAYBE_ITERATOR_SYMBOL = typeof Symbol === 'function' && Symbol.iterator;
 var FAUX_ITERATOR_SYMBOL = '@@iterator';
 
-//  获取迭代器函数
 function getIteratorFn(maybeIterable) {
   if (maybeIterable === null || typeof maybeIterable !== 'object') {
     return null;
@@ -3098,51 +2456,38 @@ var Pending = 0;
 var Resolved = 1;
 var Rejected = 2;
 
-//  细化解析惰性组件
 function refineResolvedLazyComponent(lazyComponent) {
-  //  如果已经resolved,返回结果
   return lazyComponent._status === Resolved ? lazyComponent._result : null;
 }
 
-//  获取外层组件的名字
 function getWrappedName(outerType, innerType, wrapperName) {
   var functionName = innerType.displayName || innerType.name || '';
-  //  优先是outerType的displayName,否则是wrapperName和functionName的组合
   return outerType.displayName || (functionName !== '' ? wrapperName + '(' + functionName + ')' : wrapperName);
 }
 
-//  获取组件名
 function getComponentName(type) {
   if (type == null) {
     // Host root, text node or just invalid type.
-    //  如果是根，文字节点或不存在的类型，返回null
     return null;
   }
   {
-    //  如果type的tag是数字
     if (typeof type.tag === 'number') {
-      //  告警：接收到了预料之外的对象，这可能是react内部的bug，请提issue
       warningWithoutStack$1(false, 'Received an unexpected object in getComponentName(). ' + 'This is likely a bug in React. Please file an issue.');
     }
   }
-  //  如果是构造函数，看他的静态属性displayName或者name
   if (typeof type === 'function') {
     return type.displayName || type.name || null;
   }
-  //  如果是字符串直接返回
   if (typeof type === 'string') {
     return type;
   }
   switch (type) {
-    //  如果是react当前的节点,这些都是当初symbol定义的
     case REACT_CONCURRENT_MODE_TYPE:
       return 'ConcurrentMode';
     case REACT_FRAGMENT_TYPE:
       return 'Fragment';
-    //  如果是入口
     case REACT_PORTAL_TYPE:
       return 'Portal';
-    //  如果是分析器
     case REACT_PROFILER_TYPE:
       return 'Profiler';
     case REACT_STRICT_MODE_TYPE:
@@ -3150,25 +2495,19 @@ function getComponentName(type) {
     case REACT_SUSPENSE_TYPE:
       return 'Suspense';
   }
-  //  如果type是对象
   if (typeof type === 'object') {
-    //  按照$$typeof来判断
     switch (type.$$typeof) {
       case REACT_CONTEXT_TYPE:
         return 'Context.Consumer';
       case REACT_PROVIDER_TYPE:
         return 'Context.Provider';
-      //  如果是前向ref
       case REACT_FORWARD_REF_TYPE:
         return getWrappedName(type, type.render, 'ForwardRef');
-      //  如果是memo类型，递归调用自己
       case REACT_MEMO_TYPE:
         return getComponentName(type.type);
-      //  如果是lazy类型
       case REACT_LAZY_TYPE:
         {
           var thenable = type;
-          //  细化解析惰性组件
           var resolvedThenable = refineResolvedLazyComponent(thenable);
           if (resolvedThenable) {
             return getComponentName(resolvedThenable);
@@ -3176,17 +2515,13 @@ function getComponentName(type) {
         }
     }
   }
-  //  最后返回null
   return null;
 }
 
-//  当前的debug frame
 var ReactDebugCurrentFrame = ReactSharedInternals.ReactDebugCurrentFrame;
 
-//  描述当前的fiber位置
 function describeFiber(fiber) {
   switch (fiber.tag) {
-    //  如果是类似于根的节点，返回空字符串
     case HostRoot:
     case HostPortal:
     case HostText:
@@ -3194,7 +2529,6 @@ function describeFiber(fiber) {
     case ContextProvider:
     case ContextConsumer:
       return '';
-    //  如果不是，返回组件的位置
     default:
       var owner = fiber._debugOwner;
       var source = fiber._debugSource;
@@ -3207,11 +2541,9 @@ function describeFiber(fiber) {
   }
 }
 
-//  根据Fiber获取开发和身穿环境下的堆栈
 function getStackByFiberInDevAndProd(workInProgress) {
   var info = '';
   var node = workInProgress;
-  //  不停上溯节点
   do {
     info += describeFiber(node);
     node = node.return;
@@ -3222,13 +2554,11 @@ function getStackByFiberInDevAndProd(workInProgress) {
 var current = null;
 var phase = null;
 
-//  获取当前Fiber自己的名字（仅开发环境，否则返回null）
 function getCurrentFiberOwnerNameInDevOrNull() {
   {
     if (current === null) {
       return null;
     }
-    //  获取debugOwner
     var owner = current._debugOwner;
     if (owner !== null && typeof owner !== 'undefined') {
       return getComponentName(owner.type);
@@ -3751,6 +3081,111 @@ function getToStringValue(value) {
   }
 }
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+
+
+var ReactPropTypesSecret$1 = 'SECRET_DO_NOT_PASS_THIS_OR_YOU_WILL_BE_FIRED';
+
+var ReactPropTypesSecret_1 = ReactPropTypesSecret$1;
+
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+
+
+var printWarning = function() {};
+
+{
+  var ReactPropTypesSecret = ReactPropTypesSecret_1;
+  var loggedTypeFailures = {};
+
+  printWarning = function(text) {
+    var message = 'Warning: ' + text;
+    if (typeof console !== 'undefined') {
+      console.error(message);
+    }
+    try {
+      // --- Welcome to debugging React ---
+      // This error was thrown as a convenience so that you can use this stack
+      // to find the callsite that caused this warning to fire.
+      throw new Error(message);
+    } catch (x) {}
+  };
+}
+
+/**
+ * Assert that the values match with the type specs.
+ * Error messages are memorized and will only be shown once.
+ *
+ * @param {object} typeSpecs Map of name to a ReactPropType
+ * @param {object} values Runtime values that need to be type-checked
+ * @param {string} location e.g. "prop", "context", "child context"
+ * @param {string} componentName Name of the component for error messages.
+ * @param {?Function} getStack Returns the component stack.
+ * @private
+ */
+function checkPropTypes(typeSpecs, values, location, componentName, getStack) {
+  {
+    for (var typeSpecName in typeSpecs) {
+      if (typeSpecs.hasOwnProperty(typeSpecName)) {
+        var error;
+        // Prop type validation may throw. In case they do, we don't want to
+        // fail the render phase where it didn't fail before. So we log it.
+        // After these have been cleaned up, we'll let them throw.
+        try {
+          // This is intentionally an invariant that gets caught. It's the same
+          // behavior as without this statement except with a better message.
+          if (typeof typeSpecs[typeSpecName] !== 'function') {
+            var err = Error(
+              (componentName || 'React class') + ': ' + location + ' type `' + typeSpecName + '` is invalid; ' +
+              'it must be a function, usually from the `prop-types` package, but received `' + typeof typeSpecs[typeSpecName] + '`.'
+            );
+            err.name = 'Invariant Violation';
+            throw err;
+          }
+          error = typeSpecs[typeSpecName](values, typeSpecName, componentName, location, null, ReactPropTypesSecret);
+        } catch (ex) {
+          error = ex;
+        }
+        if (error && !(error instanceof Error)) {
+          printWarning(
+            (componentName || 'React class') + ': type specification of ' +
+            location + ' `' + typeSpecName + '` is invalid; the type checker ' +
+            'function must return `null` or an `Error` but returned a ' + typeof error + '. ' +
+            'You may have forgotten to pass an argument to the type checker ' +
+            'creator (arrayOf, instanceOf, objectOf, oneOf, oneOfType, and ' +
+            'shape all require an argument).'
+          );
+
+        }
+        if (error instanceof Error && !(error.message in loggedTypeFailures)) {
+          // Only monitor this failure once because there tends to be a lot of the
+          // same error.
+          loggedTypeFailures[error.message] = true;
+
+          var stack = getStack ? getStack() : '';
+
+          printWarning(
+            'Failed ' + location + ' type: ' + error.message + (stack != null ? stack : '')
+          );
+        }
+      }
+    }
+  }
+}
+
+var checkPropTypes_1 = checkPropTypes;
+
 var ReactDebugCurrentFrame$1 = null;
 
 var ReactControlledValuePropTypes = {
@@ -3790,7 +3225,7 @@ var ReactControlledValuePropTypes = {
    * this outside of the ReactDOM controlled form components.
    */
   ReactControlledValuePropTypes.checkPropTypes = function (tagName, props) {
-    checkPropTypes(propTypes, props, 'prop', tagName, ReactDebugCurrentFrame$1.getStackAddendum);
+    checkPropTypes_1(propTypes, props, 'prop', tagName, ReactDebugCurrentFrame$1.getStackAddendum);
   };
 }
 
@@ -9296,6 +8731,25 @@ var updatedAncestorInfo = function () {};
   };
 }
 
+var ReactInternals$1 = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+
+var _ReactInternals$Sched = ReactInternals$1.Scheduler;
+var unstable_cancelCallback = _ReactInternals$Sched.unstable_cancelCallback;
+var unstable_now = _ReactInternals$Sched.unstable_now;
+var unstable_scheduleCallback = _ReactInternals$Sched.unstable_scheduleCallback;
+var unstable_shouldYield = _ReactInternals$Sched.unstable_shouldYield;
+var unstable_getFirstCallbackNode = _ReactInternals$Sched.unstable_getFirstCallbackNode;
+var unstable_runWithPriority = _ReactInternals$Sched.unstable_runWithPriority;
+var unstable_next = _ReactInternals$Sched.unstable_next;
+var unstable_continueExecution = _ReactInternals$Sched.unstable_continueExecution;
+var unstable_pauseExecution = _ReactInternals$Sched.unstable_pauseExecution;
+var unstable_getCurrentPriorityLevel = _ReactInternals$Sched.unstable_getCurrentPriorityLevel;
+var unstable_ImmediatePriority = _ReactInternals$Sched.unstable_ImmediatePriority;
+var unstable_UserBlockingPriority = _ReactInternals$Sched.unstable_UserBlockingPriority;
+var unstable_NormalPriority = _ReactInternals$Sched.unstable_NormalPriority;
+var unstable_LowPriority = _ReactInternals$Sched.unstable_LowPriority;
+var unstable_IdlePriority = _ReactInternals$Sched.unstable_IdlePriority;
+
 // Renderers that don't support persistence
 // can re-export everything from this module.
 
@@ -9461,8 +8915,8 @@ var isPrimaryRenderer = true;
 var scheduleTimeout = typeof setTimeout === 'function' ? setTimeout : undefined;
 var cancelTimeout = typeof clearTimeout === 'function' ? clearTimeout : undefined;
 var noTimeout = -1;
-var schedulePassiveEffects = scheduler.unstable_scheduleCallback;
-var cancelPassiveEffects = scheduler.unstable_cancelCallback;
+var schedulePassiveEffects = unstable_scheduleCallback;
+var cancelPassiveEffects = unstable_cancelCallback;
 
 // -------------------
 //     Mutation
@@ -10321,7 +9775,7 @@ function getMaskedContext(workInProgress, unmaskedContext) {
 
   {
     var name = getComponentName(type) || 'Unknown';
-    checkPropTypes(contextTypes, context, 'context', name, getCurrentFiberStackInDev);
+    checkPropTypes_1(contextTypes, context, 'context', name, getCurrentFiberStackInDev);
   }
 
   // Cache unmasked context so we can avoid recreating masked context unless necessary.
@@ -10392,7 +9846,7 @@ function processChildContext(fiber, type, parentContext) {
   }
   {
     var name = getComponentName(type) || 'Unknown';
-    checkPropTypes(childContextTypes, childContext, 'child context', name,
+    checkPropTypes_1(childContextTypes, childContext, 'child context', name,
     // In practice, there is one case in which we won't get a stack. It's when
     // somebody calls unstable_renderSubtreeIntoContainer() and we process
     // context from the parent component instance. The stack will be missing
@@ -11034,6 +10488,19 @@ function assignFiberPropertiesInDEV(target, source) {
   return target;
 }
 
+var ReactInternals$2 = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+
+var _ReactInternals$Sched$1 = ReactInternals$2.SchedulerTracing;
+var __interactionsRef = _ReactInternals$Sched$1.__interactionsRef;
+var __subscriberRef = _ReactInternals$Sched$1.__subscriberRef;
+var unstable_clear = _ReactInternals$Sched$1.unstable_clear;
+var unstable_getCurrent = _ReactInternals$Sched$1.unstable_getCurrent;
+var unstable_getThreadID = _ReactInternals$Sched$1.unstable_getThreadID;
+var unstable_subscribe = _ReactInternals$Sched$1.unstable_subscribe;
+var unstable_trace = _ReactInternals$Sched$1.unstable_trace;
+var unstable_unsubscribe = _ReactInternals$Sched$1.unstable_unsubscribe;
+var unstable_wrap = _ReactInternals$Sched$1.unstable_wrap;
+
 // TODO: This should be lifted into the renderer.
 
 
@@ -11083,7 +10550,7 @@ function createFiberRoot(containerInfo, isConcurrent, hydrate) {
       firstBatch: null,
       nextScheduledRoot: null,
 
-      interactionThreadID: tracing.unstable_getThreadID(),
+      interactionThreadID: unstable_getThreadID(),
       memoizedInteractions: new Set(),
       pendingInteractionMap: new Map()
     };
@@ -11142,7 +10609,7 @@ function createFiberRoot(containerInfo, isConcurrent, hydrate) {
 var lowPriorityWarning = function () {};
 
 {
-  var printWarning = function (format) {
+  var printWarning$1 = function (format) {
     for (var _len = arguments.length, args = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
       args[_key - 1] = arguments[_key];
     }
@@ -11171,7 +10638,7 @@ var lowPriorityWarning = function () {};
         args[_key2 - 2] = arguments[_key2];
       }
 
-      printWarning.apply(undefined, [format].concat(args));
+      printWarning$1.apply(undefined, [format].concat(args));
     }
   };
 }
@@ -14702,7 +14169,7 @@ function recordCommitTime() {
   if (!enableProfilerTimer) {
     return;
   }
-  commitTime = scheduler.unstable_now();
+  commitTime = unstable_now();
 }
 
 function startProfilerTimer(fiber) {
@@ -14710,10 +14177,10 @@ function startProfilerTimer(fiber) {
     return;
   }
 
-  profilerStartTime = scheduler.unstable_now();
+  profilerStartTime = unstable_now();
 
   if (fiber.actualStartTime < 0) {
-    fiber.actualStartTime = scheduler.unstable_now();
+    fiber.actualStartTime = unstable_now();
   }
 }
 
@@ -14730,7 +14197,7 @@ function stopProfilerTimerIfRunningAndRecordDelta(fiber, overrideBaseTime) {
   }
 
   if (profilerStartTime >= 0) {
-    var elapsedTime = scheduler.unstable_now() - profilerStartTime;
+    var elapsedTime = unstable_now() - profilerStartTime;
     fiber.actualDuration += elapsedTime;
     if (overrideBaseTime) {
       fiber.selfBaseDuration = elapsedTime;
@@ -15107,7 +14574,7 @@ function updateForwardRef(current$$1, workInProgress, Component, nextProps, rend
       // because they're only guaranteed to be resolved here.
       var innerPropTypes = Component.propTypes;
       if (innerPropTypes) {
-        checkPropTypes(innerPropTypes, nextProps, // Resolved props
+        checkPropTypes_1(innerPropTypes, nextProps, // Resolved props
         'prop', getComponentName(Component), getCurrentFiberStackInDev);
       }
     }
@@ -15164,7 +14631,7 @@ function updateMemoComponent(current$$1, workInProgress, Component, nextProps, u
       if (innerPropTypes) {
         // Inner memo component props aren't currently validated in createElement.
         // We could move it there, but we'd still need this for lazy code path.
-        checkPropTypes(innerPropTypes, nextProps, // Resolved props
+        checkPropTypes_1(innerPropTypes, nextProps, // Resolved props
         'prop', getComponentName(type), getCurrentFiberStackInDev);
       }
     }
@@ -15180,7 +14647,7 @@ function updateMemoComponent(current$$1, workInProgress, Component, nextProps, u
     if (_innerPropTypes) {
       // Inner memo component props aren't currently validated in createElement.
       // We could move it there, but we'd still need this for lazy code path.
-      checkPropTypes(_innerPropTypes, nextProps, // Resolved props
+      checkPropTypes_1(_innerPropTypes, nextProps, // Resolved props
       'prop', getComponentName(_type), getCurrentFiberStackInDev);
     }
   }
@@ -15223,7 +14690,7 @@ function updateSimpleMemoComponent(current$$1, workInProgress, Component, nextPr
       }
       var outerPropTypes = outerMemoType && outerMemoType.propTypes;
       if (outerPropTypes) {
-        checkPropTypes(outerPropTypes, nextProps, // Resolved (SimpleMemoComponent has no defaultProps)
+        checkPropTypes_1(outerPropTypes, nextProps, // Resolved (SimpleMemoComponent has no defaultProps)
         'prop', getComponentName(outerMemoType), getCurrentFiberStackInDev);
       }
       // Inner propTypes will be validated in the function component path.
@@ -15278,7 +14745,7 @@ function updateFunctionComponent(current$$1, workInProgress, Component, nextProp
       // because they're only guaranteed to be resolved here.
       var innerPropTypes = Component.propTypes;
       if (innerPropTypes) {
-        checkPropTypes(innerPropTypes, nextProps, // Resolved props
+        checkPropTypes_1(innerPropTypes, nextProps, // Resolved props
         'prop', getComponentName(Component), getCurrentFiberStackInDev);
       }
     }
@@ -15320,7 +14787,7 @@ function updateClassComponent(current$$1, workInProgress, Component, nextProps, 
       // because they're only guaranteed to be resolved here.
       var innerPropTypes = Component.propTypes;
       if (innerPropTypes) {
-        checkPropTypes(innerPropTypes, nextProps, // Resolved props
+        checkPropTypes_1(innerPropTypes, nextProps, // Resolved props
         'prop', getComponentName(Component), getCurrentFiberStackInDev);
       }
     }
@@ -15589,7 +15056,7 @@ function mountLazyComponent(_current, workInProgress, elementType, updateExpirat
           if (workInProgress.type !== workInProgress.elementType) {
             var outerPropTypes = Component.propTypes;
             if (outerPropTypes) {
-              checkPropTypes(outerPropTypes, resolvedProps, // Resolved for outer only
+              checkPropTypes_1(outerPropTypes, resolvedProps, // Resolved for outer only
               'prop', getComponentName(Component), getCurrentFiberStackInDev);
             }
           }
@@ -16084,7 +15551,7 @@ function updateContextProvider(current$$1, workInProgress, renderExpirationTime)
     var providerPropTypes = workInProgress.type.propTypes;
 
     if (providerPropTypes) {
-      checkPropTypes(providerPropTypes, newProps, 'prop', 'Context.Provider', getCurrentFiberStackInDev);
+      checkPropTypes_1(providerPropTypes, newProps, 'prop', 'Context.Provider', getCurrentFiberStackInDev);
     }
   }
 
@@ -16348,7 +15815,7 @@ function beginWork(current$$1, workInProgress, renderExpirationTime) {
           if (workInProgress.type !== workInProgress.elementType) {
             var outerPropTypes = _type2.propTypes;
             if (outerPropTypes) {
-              checkPropTypes(outerPropTypes, _resolvedProps3, // Resolved for outer only
+              checkPropTypes_1(outerPropTypes, _resolvedProps3, // Resolved for outer only
               'prop', getComponentName(_type2), getCurrentFiberStackInDev);
             }
           }
@@ -18688,7 +18155,7 @@ function commitWork(current$$1, finishedWork) {
             // Memoize using the boundary fiber to prevent redundant listeners.
             var retry = retryTimedOutBoundary.bind(null, finishedWork, thenable);
             if (enableSchedulerTracing) {
-              retry = tracing.unstable_wrap(retry);
+              retry = unstable_wrap(retry);
             }
             if (!retryCache.has(thenable)) {
               retryCache.add(thenable);
@@ -18798,7 +18265,7 @@ function attachPingListener(root, renderExpirationTime, thenable) {
     threadIDs.add(renderExpirationTime);
     var ping = pingSuspendedRoot.bind(null, root, thenable, renderExpirationTime);
     if (enableSchedulerTracing) {
-      ping = tracing.unstable_wrap(ping);
+      ping = unstable_wrap(ping);
     }
     thenable.then(ping, ping);
   }
@@ -18962,7 +18429,7 @@ function throwException(root, returnFiber, sourceFiber, value, renderExpirationT
           retryCache.add(thenable);
           var retry = retryTimedOutBoundary.bind(null, _workInProgress, thenable);
           if (enableSchedulerTracing) {
-            retry = tracing.unstable_wrap(retry);
+            retry = unstable_wrap(retry);
           }
           thenable.then(retry, retry);
         }
@@ -19125,7 +18592,7 @@ var warnAboutInvalidUpdates = void 0;
 if (enableSchedulerTracing) {
   // Provide explicit error message when production+profiling bundle of e.g. react-dom
   // is used with production (non-profiling) bundle of scheduler/tracing
-  !(tracing.__interactionsRef != null && tracing.__interactionsRef.current != null) ? invariant(false, 'It is not supported to run the profiling version of a renderer (for example, `react-dom/profiling`) without also replacing the `scheduler/tracing` module with `scheduler/tracing-profiling`. Your bundler might have a setting for aliasing both modules. Learn more at http://fb.me/react-profiling') : void 0;
+  !(__interactionsRef != null && __interactionsRef.current != null) ? invariant(false, 'It is not supported to run the profiling version of a renderer (for example, `react-dom/profiling`) without also replacing the `scheduler/tracing` module with `scheduler/tracing-profiling`. Your bundler might have a setting for aliasing both modules. Learn more at http://fb.me/react-profiling') : void 0;
 }
 
 {
@@ -19513,8 +18980,8 @@ function commitRoot(root, finishedWork) {
   if (enableSchedulerTracing) {
     // Restore any pending interactions at this point,
     // So that cascading work triggered during the render phase will be accounted for.
-    prevInteractions = tracing.__interactionsRef.current;
-    tracing.__interactionsRef.current = root.memoizedInteractions;
+    prevInteractions = __interactionsRef.current;
+    __interactionsRef.current = root.memoizedInteractions;
   }
 
   // Reset this to null before calling lifecycles
@@ -19638,9 +19105,9 @@ function commitRoot(root, finishedWork) {
       // TODO: Avoid this extra callback by mutating the tracing ref directly,
       // like we do at the beginning of commitRoot. I've opted not to do that
       // here because that code is still in flux.
-      callback = tracing.unstable_wrap(callback);
+      callback = unstable_wrap(callback);
     }
-    passiveEffectCallbackHandle = scheduler.unstable_runWithPriority(scheduler.unstable_NormalPriority, function () {
+    passiveEffectCallbackHandle = unstable_runWithPriority(unstable_NormalPriority, function () {
       return schedulePassiveEffects(callback);
     });
     passiveEffectCallback = callback;
@@ -19666,12 +19133,12 @@ function commitRoot(root, finishedWork) {
   onCommit(root, earliestRemainingTimeAfterCommit);
 
   if (enableSchedulerTracing) {
-    tracing.__interactionsRef.current = prevInteractions;
+    __interactionsRef.current = prevInteractions;
 
     var subscriber = void 0;
 
     try {
-      subscriber = tracing.__subscriberRef.current;
+      subscriber = __subscriberRef.current;
       if (subscriber !== null && root.memoizedInteractions.size > 0) {
         var threadID = computeThreadID(committedExpirationTime, root.interactionThreadID);
         subscriber.onWorkStopped(root.memoizedInteractions, threadID);
@@ -20067,7 +19534,7 @@ function renderRoot(root, isYieldy) {
       root.memoizedInteractions = interactions;
 
       if (interactions.size > 0) {
-        var subscriber = tracing.__subscriberRef.current;
+        var subscriber = __subscriberRef.current;
         if (subscriber !== null) {
           var threadID = computeThreadID(expirationTime, root.interactionThreadID);
           try {
@@ -20090,8 +19557,8 @@ function renderRoot(root, isYieldy) {
   if (enableSchedulerTracing) {
     // We're about to start new traced work.
     // Restore pending interactions so cascading work triggered during the render phase will be accounted for.
-    prevInteractions = tracing.__interactionsRef.current;
-    tracing.__interactionsRef.current = root.memoizedInteractions;
+    prevInteractions = __interactionsRef.current;
+    __interactionsRef.current = root.memoizedInteractions;
   }
 
   var didFatal = false;
@@ -20165,7 +19632,7 @@ function renderRoot(root, isYieldy) {
 
   if (enableSchedulerTracing) {
     // Traced work is done for now; restore the previous interactions.
-    tracing.__interactionsRef.current = prevInteractions;
+    __interactionsRef.current = prevInteractions;
   }
 
   // We're done performing work. Time to clean up.
@@ -20336,7 +19803,7 @@ function computeUniqueAsyncExpiration() {
 }
 
 function computeExpirationForFiber(currentTime, fiber) {
-  var priorityLevel = scheduler.unstable_getCurrentPriorityLevel();
+  var priorityLevel = unstable_getCurrentPriorityLevel();
 
   var expirationTime = void 0;
   if ((fiber.mode & ConcurrentMode) === NoContext) {
@@ -20347,18 +19814,18 @@ function computeExpirationForFiber(currentTime, fiber) {
     expirationTime = nextRenderExpirationTime;
   } else {
     switch (priorityLevel) {
-      case scheduler.unstable_ImmediatePriority:
+      case unstable_ImmediatePriority:
         expirationTime = Sync;
         break;
-      case scheduler.unstable_UserBlockingPriority:
+      case unstable_UserBlockingPriority:
         expirationTime = computeInteractiveExpiration(currentTime);
         break;
-      case scheduler.unstable_NormalPriority:
+      case unstable_NormalPriority:
         // This is a normal, concurrent update
         expirationTime = computeAsyncExpiration(currentTime);
         break;
-      case scheduler.unstable_LowPriority:
-      case scheduler.unstable_IdlePriority:
+      case unstable_LowPriority:
+      case unstable_IdlePriority:
         expirationTime = Never;
         break;
       default:
@@ -20376,7 +19843,7 @@ function computeExpirationForFiber(currentTime, fiber) {
   // allows us to synchronously flush all interactive updates
   // when needed.
   // TODO: Move this to renderer?
-  if (priorityLevel === scheduler.unstable_UserBlockingPriority && (lowestPriorityPendingInteractiveExpirationTime === NoWork || expirationTime < lowestPriorityPendingInteractiveExpirationTime)) {
+  if (priorityLevel === unstable_UserBlockingPriority && (lowestPriorityPendingInteractiveExpirationTime === NoWork || expirationTime < lowestPriorityPendingInteractiveExpirationTime)) {
     lowestPriorityPendingInteractiveExpirationTime = expirationTime;
   }
 
@@ -20503,7 +19970,7 @@ function scheduleWorkToRoot(fiber, expirationTime) {
 
   if (enableSchedulerTracing) {
     if (root !== null) {
-      var interactions = tracing.__interactionsRef.current;
+      var interactions = __interactionsRef.current;
       if (interactions.size > 0) {
         var pendingInteractionMap = root.pendingInteractionMap;
         var pendingInteractions = pendingInteractionMap.get(expirationTime);
@@ -20525,7 +19992,7 @@ function scheduleWorkToRoot(fiber, expirationTime) {
           });
         }
 
-        var subscriber = tracing.__subscriberRef.current;
+        var subscriber = __subscriberRef.current;
         if (subscriber !== null) {
           var threadID = computeThreadID(expirationTime, root.interactionThreadID);
           subscriber.onWorkScheduled(interactions, threadID);
@@ -20586,7 +20053,7 @@ function scheduleWork(fiber, expirationTime) {
 }
 
 function syncUpdates(fn, a, b, c, d) {
-  return scheduler.unstable_runWithPriority(scheduler.unstable_ImmediatePriority, function () {
+  return unstable_runWithPriority(unstable_ImmediatePriority, function () {
     return fn(a, b, c, d);
   });
 }
@@ -20612,7 +20079,7 @@ var isUnbatchingUpdates = false;
 
 var completedBatches = null;
 
-var originalStartTimeMs = scheduler.unstable_now();
+var originalStartTimeMs = unstable_now();
 var currentRendererTime = msToExpirationTime(originalStartTimeMs);
 var currentSchedulerTime = currentRendererTime;
 
@@ -20622,7 +20089,7 @@ var nestedUpdateCount = 0;
 var lastCommittedRootDuringThisBatch = null;
 
 function recomputeCurrentRendererTime() {
-  var currentTimeMs = scheduler.unstable_now() - originalStartTimeMs;
+  var currentTimeMs = unstable_now() - originalStartTimeMs;
   currentRendererTime = msToExpirationTime(currentTimeMs);
 }
 
@@ -20636,7 +20103,7 @@ function scheduleCallbackWithExpirationTime(root, expirationTime) {
       if (callbackID !== null) {
         // Existing callback has insufficient timeout. Cancel and schedule a
         // new one.
-        scheduler.unstable_cancelCallback(callbackID);
+        unstable_cancelCallback(callbackID);
       }
     }
     // The request callback timer is already running. Don't start a new one.
@@ -20645,10 +20112,10 @@ function scheduleCallbackWithExpirationTime(root, expirationTime) {
   }
 
   callbackExpirationTime = expirationTime;
-  var currentMs = scheduler.unstable_now() - originalStartTimeMs;
+  var currentMs = unstable_now() - originalStartTimeMs;
   var expirationTimeMs = expirationTimeToMs(expirationTime);
   var timeout = expirationTimeMs - currentMs;
-  callbackID = scheduler.unstable_scheduleCallback(performAsyncWork, { timeout: timeout });
+  callbackID = unstable_scheduleCallback(performAsyncWork, { timeout: timeout });
 }
 
 // For every call to renderRoot, one of onFatal, onComplete, onSuspend, and
@@ -20861,7 +20328,7 @@ function shouldYieldToRenderer() {
   if (didYield) {
     return true;
   }
-  if (scheduler.unstable_shouldYield()) {
+  if (unstable_shouldYield()) {
     didYield = true;
     return true;
   }
@@ -21082,7 +20549,7 @@ function completeRoot(root, finishedWork, expirationTime) {
     lastCommittedRootDuringThisBatch = root;
     nestedUpdateCount = 0;
   }
-  scheduler.unstable_runWithPriority(scheduler.unstable_ImmediatePriority, function () {
+  unstable_runWithPriority(unstable_ImmediatePriority, function () {
     commitRoot(root, finishedWork);
   });
 }
@@ -21154,7 +20621,7 @@ function interactiveUpdates$1(fn, a, b) {
   var previousIsBatchingUpdates = isBatchingUpdates;
   isBatchingUpdates = true;
   try {
-    return scheduler.unstable_runWithPriority(scheduler.unstable_UserBlockingPriority, function () {
+    return unstable_runWithPriority(unstable_UserBlockingPriority, function () {
       return fn(a, b);
     });
   } finally {
@@ -21941,6 +21408,6 @@ var ReactDOM$3 = ( ReactDOM$2 && ReactDOM ) || ReactDOM$2;
 // This is hacky but makes it work with both Rollup and Jest.
 var reactDom = ReactDOM$3.default || ReactDOM$3;
 
-module.exports = reactDom;
-  })();
-}
+return reactDom;
+
+})));
