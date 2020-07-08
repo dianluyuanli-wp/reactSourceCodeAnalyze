@@ -3236,12 +3236,14 @@ function getCurrentFiberOwnerNameInDevOrNull() {
   }
   return null;
 }
-
+//  在开发环境获取当前fiber的堆栈
 function getCurrentFiberStackInDev() {
   {
     if (current === null) {
       return '';
     }
+    //  这是安全的，因为如果当前的fiber存在，我们就会调解，
+    //  确保它是正在工作的版本
     // Safe because if current fiber exists, we are reconciling,
     // and it is guaranteed to be the work-in-progress version.
     return getStackByFiberInDevAndProd(current);
@@ -3249,6 +3251,7 @@ function getCurrentFiberStackInDev() {
   return '';
 }
 
+//  重置当前的fiber
 function resetCurrentFiber() {
   {
     ReactDebugCurrentFrame.getCurrentStack = null;
@@ -3257,6 +3260,7 @@ function resetCurrentFiber() {
   }
 }
 
+//  设置当前的fiber
 function setCurrentFiber(fiber) {
   {
     ReactDebugCurrentFrame.getCurrentStack = getCurrentFiberStackInDev;
@@ -3264,13 +3268,16 @@ function setCurrentFiber(fiber) {
     phase = null;
   }
 }
-
+//  设置当前状态
 function setCurrentPhase(lifeCyclePhase) {
   {
     phase = lifeCyclePhase;
   }
 }
 
+//  类似于不变性的警告，只有在条件不满足的时候才打印
+//  该方法可以用来在开发环境输出问题的绝对路径，在生产环境移除logging
+//  代码将会保证逻辑一致并且保持一致的代码路径
 /**
  * Similar to invariant but only logs a warning if the condition is not met.
  * This can be used to log issues in development environments in critical
@@ -3292,31 +3299,44 @@ var warning = warningWithoutStack$1;
     for (var _len = arguments.length, args = Array(_len > 2 ? _len - 2 : 0), _key = 2; _key < _len; _key++) {
       args[_key - 2] = arguments[_key];
     }
-
+    //  正常参数之余，还要补上一个堆栈信息stack
     warningWithoutStack$1.apply(undefined, [false, format + '%s'].concat(args, [stack]));
   };
 }
 
 var warning$1 = warning;
 
+//  一个受保护的属性，这是被react分开控制的，不会被写到dom上
 // A reserved attribute.
 // It is handled by React separately and shouldn't be written to the DOM.
 var RESERVED = 0;
 
+//  一个简单的字符串属性
+//  不在白名单中的属性都会被预设成这个
 // A simple string attribute.
 // Attributes that aren't in the whitelist are presumed to have this type.
 var STRING = 1;
 
+//  在react中接受布尔型数据的字符串属性。在html中，他们会被当做可枚举属性
+//  被引用，可能的值为true或者false（都是英文字符串）
 // A string attribute that accepts booleans in React. In HTML, these are called
 // "enumerated" attributes with "true" and "false" as possible values.
 // When true, it should be set to a "true" string.
 // When false, it should be set to a "false" string.
 var BOOLEANISH_STRING = 2;
 
+//  一个真实的布尔属性
+//  为true时，需要被表现出来（被设置为空字符串或者是他的名字）
+//  为false时，需要被删除
 // A real boolean attribute.
 // When true, it should be present (set either to an empty string or its name).
 // When false, it should be omitted.
 var BOOLEAN = 3;
+
+//  一个可以被作为标志位，也可以作为数值的属性
+//  为true时，需要被表现出来（被设置为空字符串或者是他的名字）
+//  为false时，需要被删除
+//  其他值时，需要被表现为那个值
 
 // An attribute that can be used as a flag as well as with a value.
 // When true, it should be present (set either to an empty string or its name).
@@ -3324,49 +3344,63 @@ var BOOLEAN = 3;
 // For any other value, should be present with that value.
 var OVERLOADED_BOOLEAN = 4;
 
+//  一个必须为数字或者可以被解析为数字的属性，否则的话将会被移除
 // An attribute that must be numeric or parse as a numeric.
 // When falsy, it should be removed.
 var NUMERIC = 5;
 
+//  一个必须为正数或者能够被parse为正数的值，否则移除
 // An attribute that must be positive numeric or parse as a positive numeric.
 // When falsy, it should be removed.
 var POSITIVE_NUMERIC = 6;
 
+//  被允许作为属性名开头的字符
 /* eslint-disable max-len */
 var ATTRIBUTE_NAME_START_CHAR = ':A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD';
 /* eslint-enable max-len */
+//  能够作为属性名的字符
 var ATTRIBUTE_NAME_CHAR = ATTRIBUTE_NAME_START_CHAR + '\\-.0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040';
 
-
+//  根属性名
 var ROOT_ATTRIBUTE_NAME = 'data-reactroot';
+//  可用的属性名的正则
 var VALID_ATTRIBUTE_NAME_REGEX = new RegExp('^[' + ATTRIBUTE_NAME_START_CHAR + '][' + ATTRIBUTE_NAME_CHAR + ']*$');
 
+//  是否有自有属性
 var hasOwnProperty = Object.prototype.hasOwnProperty;
+//  非法属性名的缓存
 var illegalAttributeNameCache = {};
+//  校验过的属性名的缓存
 var validatedAttributeNameCache = {};
 
+//  属性名是否安全
 function isAttributeNameSafe(attributeName) {
+  //  先用缓存里的内容进行校验
   if (hasOwnProperty.call(validatedAttributeNameCache, attributeName)) {
     return true;
   }
   if (hasOwnProperty.call(illegalAttributeNameCache, attributeName)) {
     return false;
   }
+  //  不行再手动校验
   if (VALID_ATTRIBUTE_NAME_REGEX.test(attributeName)) {
     validatedAttributeNameCache[attributeName] = true;
     return true;
   }
   illegalAttributeNameCache[attributeName] = true;
+  //  有问题的话抛错
   {
     warning$1(false, 'Invalid attribute name: `%s`', attributeName);
   }
   return false;
 }
 
+//  是否是需要忽略的属性
 function shouldIgnoreAttribute(name, propertyInfo, isCustomComponentTag) {
   if (propertyInfo !== null) {
     return propertyInfo.type === RESERVED;
   }
+  //  是否是组件通用tag
   if (isCustomComponentTag) {
     return false;
   }
