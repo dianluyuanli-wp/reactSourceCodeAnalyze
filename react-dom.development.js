@@ -3404,17 +3404,21 @@ function shouldIgnoreAttribute(name, propertyInfo, isCustomComponentTag) {
   if (isCustomComponentTag) {
     return false;
   }
+  //  onClick之类on开头的属性名
   if (name.length > 2 && (name[0] === 'o' || name[0] === 'O') && (name[1] === 'n' || name[1] === 'N')) {
     return true;
   }
   return false;
 }
 
+//  是否需要在移除属性的时候警告
 function shouldRemoveAttributeWithWarning(name, value, propertyInfo, isCustomComponentTag) {
+  //  保留属性不需要警告
   if (propertyInfo !== null && propertyInfo.type === RESERVED) {
     return false;
   }
   switch (typeof value) {
+    //  函数和symbol都要警告
     case 'function':
     // $FlowIssue symbol is perfectly valid here
     case 'symbol':
@@ -3429,6 +3433,7 @@ function shouldRemoveAttributeWithWarning(name, value, propertyInfo, isCustomCom
           return !propertyInfo.acceptsBooleans;
         } else {
           var prefix = name.toLowerCase().slice(0, 5);
+          //  非data或aria(无障碍标签)，返回true
           return prefix !== 'data-' && prefix !== 'aria-';
         }
       }
@@ -3436,17 +3441,21 @@ function shouldRemoveAttributeWithWarning(name, value, propertyInfo, isCustomCom
       return false;
   }
 }
-
+//  是否应该移除属性
 function shouldRemoveAttribute(name, value, propertyInfo, isCustomComponentTag) {
+  //  如果是空值，返回true
   if (value === null || typeof value === 'undefined') {
     return true;
   }
+  //  
   if (shouldRemoveAttributeWithWarning(name, value, propertyInfo, isCustomComponentTag)) {
     return true;
   }
+  //  是否是默认tag
   if (isCustomComponentTag) {
     return false;
   }
+  //  根据数值的不同类型来判断
   if (propertyInfo !== null) {
     switch (propertyInfo.type) {
       case BOOLEAN:
@@ -3462,26 +3471,41 @@ function shouldRemoveAttribute(name, value, propertyInfo, isCustomComponentTag) 
   return false;
 }
 
+//  获取属性信息
 function getPropertyInfo(name) {
   return properties.hasOwnProperty(name) ? properties[name] : null;
 }
 
+//  属性记录的构造函数
 function PropertyInfoRecord(name, type, mustUseProperty, attributeName, attributeNamespace) {
+  //  是否接受布尔运算
   this.acceptsBooleans = type === BOOLEANISH_STRING || type === BOOLEAN || type === OVERLOADED_BOOLEAN;
+  //  属性名
   this.attributeName = attributeName;
+  //  属性命名空间
   this.attributeNamespace = attributeNamespace;
+  //  必选属性
   this.mustUseProperty = mustUseProperty;
+  //  特性名
   this.propertyName = name;
+  //  类型
   this.type = type;
 }
+
+//  当给下面的列表添加属性的时候，确保也添加了possibleStandardNames模块
+//  以便验证大小写和命名警告
 
 // When adding attributes to this list, be sure to also add them to
 // the `possibleStandardNames` module to ensure casing and incorrect
 // name warnings.
 var properties = {};
 
+//  这些属性是react的保留属性，他们不应该出现在dom上
 // These props are reserved by React. They shouldn't be written to the DOM.
 ['children', 'dangerouslySetInnerHTML',
+//  这避免了默认值对常规元素的赋值（不仅仅是input）,现在ReactDOMInput被赋予默认值
+//  我们需要它吗？
+
 // TODO: This prevents the assignment of defaultValue to regular
 // elements (not just inputs). Now that ReactDOMInput assigns to the
 // defaultValue property -- do we need this?
@@ -3492,6 +3516,7 @@ var properties = {};
 } // attributeNamespace
 );
 
+//  部分react字符串属性值有不同的名字，这个是react属性名到真实属性名的映射
 // A few React string attributes have a different name.
 // This is a mapping from React prop names to the attribute names.
 [['acceptCharset', 'accept-charset'], ['className', 'class'], ['htmlFor', 'for'], ['httpEquiv', 'http-equiv']].forEach(function (_ref) {
@@ -3504,6 +3529,10 @@ var properties = {};
 } // attributeNamespace
 );
 
+//  这些事接受'true'或者'false'类型的可枚举html属性
+//  在react中，我们允许用户透传'true'或者‘false’,尽管他们
+//  并不是真正的布尔属性（他们会被强制转换成字符串）
+
 // These are "enumerated" HTML attributes that accept "true" and "false".
 // In React, we let users pass `true` and `false` even though technically
 // these aren't boolean attributes (they are coerced to strings).
@@ -3513,6 +3542,11 @@ var properties = {};
   null);
 } // attributeNamespace
 );
+
+//  这些是接受'true'或者‘false’的svg可枚举属性
+//  在react中，我们允许用户透传'true'或者‘false’,尽管他们
+//  并不是真正的布尔属性（他们会被强制转换成字符串）
+//  因为是svg属性，所以他们是大小写敏感的
 
 // These are "enumerated" SVG attributes that accept "true" and "false".
 // In React, we let users pass `true` and `false` even though technically
@@ -3525,8 +3559,11 @@ var properties = {};
 } // attributeNamespace
 );
 
+//  这些是html标签的布尔类型属性
 // These are HTML boolean attributes.
 ['allowFullScreen', 'async',
+//  注意：这是一些特殊的需要避免在客户端被写到DOM的case，因为浏览器的不确定性，我们使用focus
+
 // Note: there is a special case that prevents it from being written to the DOM
 // on the client side because the browsers are inconsistent. Instead we call focus().
 'autoFocus', 'autoPlay', 'controls', 'default', 'defer', 'disabled', 'formNoValidate', 'hidden', 'loop', 'noModule', 'noValidate', 'open', 'playsInline', 'readOnly', 'required', 'reversed', 'scoped', 'seamless',
@@ -3538,9 +3575,18 @@ var properties = {};
 } // attributeNamespace
 );
 
+//  这些是dom属性而不是标签，他们是布尔数
+
+//  这个是properties和attribute的区别
+//  https://www.cnblogs.com/lmjZone/p/8760232.html
+//  简单来说，property是dom的对象属性，attribute是HTML标签上的属性
+
 // These are the few React props that we set as DOM properties
 // rather than attributes. These are all booleans.
 ['checked',
+//  注意，option.selected在selected.multiple移除属性的时候是不会更新的
+//  我们有特殊逻辑来应对这种情况
+
 // Note: `option.selected` is not updated if `select.multiple` is
 // disabled with `removeAttribute`. We have special logic for handling this.
 'multiple', 'muted', 'selected'].forEach(function (name) {
@@ -3549,6 +3595,8 @@ var properties = {};
   null);
 } // attributeNamespace
 );
+
+//  这些是可以重载的html标签属性，他们像布尔数一样，但是也接受字符串值
 
 // These are HTML attributes that are "overloaded booleans": they behave like
 // booleans, but can also accept a string value.
@@ -3559,6 +3607,7 @@ var properties = {};
 } // attributeNamespace
 );
 
+//  必须为正数的html标签属性
 // These are HTML attributes that must be positive numbers.
 ['cols', 'rows', 'size', 'span'].forEach(function (name) {
   properties[name] = new PropertyInfoRecord(name, POSITIVE_NUMERIC, false, // mustUseProperty
@@ -3567,6 +3616,7 @@ var properties = {};
 } // attributeNamespace
 );
 
+//  必须为数字的html标签属性
 // These are HTML attributes that must be numbers.
 ['rowSpan', 'start'].forEach(function (name) {
   properties[name] = new PropertyInfoRecord(name, NUMERIC, false, // mustUseProperty
@@ -3580,6 +3630,10 @@ var capitalize = function (token) {
   return token[1].toUpperCase();
 };
 
+//  以下是需要特殊处理的svg属性列表，它们有特殊的大小写模式，命名空间或布尔值的赋值方式
+//  忽略只接受字符串且名称相同的常规属性,就像在html白名单中一样。这其中的不少属性比较罕见
+//  这个列表是通过取消MDN文档创建的。
+
 // This is a list of all SVG attributes that need special casing, namespacing,
 // or boolean value assignment. Regular attributes that just accept strings
 // and have the same names are omitted, just like in the HTML whitelist.
@@ -3592,6 +3646,7 @@ var capitalize = function (token) {
 } // attributeNamespace
 );
 
+//  字符串型的svg属性拥有xlink的命名空间
 // String SVG attributes with the xlink namespace.
 ['xlink:actuate', 'xlink:arcrole', 'xlink:href', 'xlink:role', 'xlink:show', 'xlink:title', 'xlink:type'].forEach(function (attributeName) {
   var name = attributeName.replace(CAMELIZE, capitalize);
@@ -3599,12 +3654,16 @@ var capitalize = function (token) {
   attributeName, 'http://www.w3.org/1999/xlink');
 });
 
+//  这些字符串型属性拥有xml的命名空间
 // String SVG attributes with the xml namespace.
 ['xml:base', 'xml:lang', 'xml:space'].forEach(function (attributeName) {
   var name = attributeName.replace(CAMELIZE, capitalize);
   properties[name] = new PropertyInfoRecord(name, STRING, false, // mustUseProperty
   attributeName, 'http://www.w3.org/XML/1998/namespace');
 });
+
+//  这些属性在html和svg中都存在，再svg中他们是大小写敏感的，所以我们不能
+//  像在仅用在html中的属性名那样来使用react名字
 
 // These attribute exists both in HTML and SVG.
 // The attribute name is case-sensitive in SVG so we can't just use
