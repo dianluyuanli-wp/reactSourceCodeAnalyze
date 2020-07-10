@@ -3675,6 +3675,9 @@ var capitalize = function (token) {
 } // attributeNamespace
 );
 
+//  获取节点上某个属性的值，仅用在开发环境的ssr校验中，expected这个属性是用来作为一个
+//  提示，告诉我们期望的值是什么。某些属性有多个相等的值
+
 /**
  * Get the value for a property on a node. Only used in DEV for SSR validation.
  * The "expected" argument is used as a hint of what the expected value is.
