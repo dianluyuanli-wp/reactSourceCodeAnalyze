@@ -3857,6 +3857,8 @@ function setValueForProperty(node, name, value, isCustomComponentTag) {
   }
 }
 
+//  下面不允许绝大多数非字符串类型的字符串的连结，为了避开这个限制，我们使用
+//  不透明的类型，其只能通过getToStringValue传递value来获得
 // Flow does not allow string concatenation of most non-string types. To work
 // around this limitation, we use an opaque type that can only be obtained by
 // passing the value through getToStringValue first.
@@ -3878,8 +3880,10 @@ function getToStringValue(value) {
   }
 }
 
+//  定义当前的debug堆栈
 var ReactDebugCurrentFrame$1 = null;
 
+//  react受控属性值
 var ReactControlledValuePropTypes = {
   checkPropTypes: null
 };
@@ -3887,6 +3891,7 @@ var ReactControlledValuePropTypes = {
 {
   ReactDebugCurrentFrame$1 = ReactSharedInternals.ReactDebugCurrentFrame;
 
+  //  只读属性
   var hasReadOnlyValue = {
     button: true,
     checkbox: true,
@@ -3898,20 +3903,27 @@ var ReactControlledValuePropTypes = {
   };
 
   var propTypes = {
+    //  获取value
     value: function (props, propName, componentName) {
+      //  只读属性等都都返回null
       if (hasReadOnlyValue[props.type] || props.onChange || props.readOnly || props.disabled || props[propName] == null) {
         return null;
       }
+      //  你给一个表单域提供了一个value,但是却没有onChange事件，这将会渲染一个只读的表单域。
+      //  如果这个表单域是可变的，请使用defaultVale或者设置onChange方法或者设置readOnly
       return new Error('You provided a `value` prop to a form field without an ' + '`onChange` handler. This will render a read-only field. If ' + 'the field should be mutable use `defaultValue`. Otherwise, ' + 'set either `onChange` or `readOnly`.');
     },
     checked: function (props, propName, componentName) {
       if (props.onChange || props.readOnly || props.disabled || props[propName] == null) {
         return null;
       }
+      //  报错信息基本同上
       return new Error('You provided a `checked` prop to a form field without an ' + '`onChange` handler. This will render a read-only field. If ' + 'the field should be mutable use `defaultChecked`. Otherwise, ' + 'set either `onChange` or `readOnly`.');
     }
   };
 
+  //  提供一个链接向受控表单的value,你不能在受控的reactDom表单组件
+  //  之外使用这个值。
   /**
    * Provide a linked `value` attribute for controlled forms. You should not use
    * this outside of the ReactDOM controlled form components.
@@ -3921,10 +3933,16 @@ var ReactControlledValuePropTypes = {
   };
 }
 
+//  开启用户的Timing相关api
 var enableUserTimingAPI = true;
 
+//  帮助确认在生命周期钩子的初始阶段和setState中副作用
 // Helps identify side effects in begin-phase lifecycle hooks and setState reducers:
 var debugRenderPhaseSideEffects = false;
+
+//  在一些情况下，严格模式会在生命周期中发生两次渲染，
+//  这会对测试过程导致一些迷惑，这在生产环境中也会
+//  影响性能，因此设置这个flag能够用来控制这个行为
 
 // In some cases, StrictMode should also double-render lifecycles.
 // This can be confusing for tests though,
@@ -3932,19 +3950,25 @@ var debugRenderPhaseSideEffects = false;
 // This feature flag can be used to control the behavior:
 var debugRenderPhaseSideEffectsForStrictMode = true;
 
+//  为了保留debugger暂停并捕获错误的行为,我们重放了
+//  开始阶段错误组件内部的invokeGuardedCallback方法
 // To preserve the "Pause on caught exceptions" behavior of the debugger, we
 // replay the begin phase of a failed component inside invokeGuardedCallback.
 var replayFailedUnitOfWorkWithInvokeGuardedCallback = true;
 
+//  关于废弃特性的警告，async-unsafe的生命周期，与RFC #6相关
 // Warn about deprecated, async-unsafe lifecycles; relates to RFC #6:
 var warnAboutDeprecatedLifecycles = false;
 
+//  为Profiler的子树收集先进的时间度量
 // Gather advanced timing metrics for Profiler subtrees.
 var enableProfilerTimer = true;
 
+//  追踪每次commit时影响触发器
 // Trace which interactions trigger each commit.
 var enableSchedulerTracing = true;
 
+//  仅在www构建中使用
 // Only used in www builds.
 var enableSuspenseServerRenderer = false; // TODO: true? Here it might just be false.
 
@@ -3954,23 +3978,30 @@ var enableSuspenseServerRenderer = false; // TODO: true? Here it might just be f
 // Only used in www builds.
 
 
+//  react fire: 避免value和checked属性与他们的Dom属性相关联
 // React Fire: prevent the value and checked attributes from syncing
 // with their related DOM properties
 var disableInputAttributeSyncing = false;
 
+//  这些API将在未来的16.7版本中成为unstable,通过一个标志位
+//  以便在16.6的小版本中控制这些行为
 // These APIs will no longer be "unstable" in the upcoming 16.7 release,
 // Control this behavior with a flag to support 16.6 minor releases in the meanwhile.
 var enableStableConcurrentModeAPIs = false;
 
+//  属性名缩写时名称冲突报警
 var warnAboutShorthandPropertyCollision = false;
 
+//  TODO: 直接通过some-package/src/*来引入不好
 // TODO: direct imports like some-package/src/* are bad. Fix me.
 var didWarnValueDefaultValue = false;
 var didWarnCheckedDefaultChecked = false;
 var didWarnControlledToUncontrolled = false;
 var didWarnUncontrolledToControlled = false;
 
+//  是否是受控的
 function isControlled(props) {
+  //  判断对应的属性是否有值
   var usesChecked = props.type === 'checkbox' || props.type === 'radio';
   return usesChecked ? props.checked != null : props.value != null;
 }
