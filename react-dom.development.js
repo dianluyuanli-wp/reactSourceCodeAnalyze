@@ -3810,7 +3810,7 @@ function setValueForProperty(node, name, value, isCustomComponentTag) {
     return;
   }
   var mustUseProperty = propertyInfo.mustUseProperty;
-  //  如果是比要属性
+  //  如果必要属性
   if (mustUseProperty) {
     var propertyName = propertyInfo.propertyName;
 
@@ -4006,6 +4006,14 @@ function isControlled(props) {
   return usesChecked ? props.checked != null : props.value != null;
 }
 
+//  实现一个Input组件，它允许设置这些可选属性：checked,valued,defaultChecked和defaultValue
+//  如果没有提供checked或者value(为null或者undefined)，用户改变checked状态或
+//  value的行为将会触发元素的更新
+
+//  如果提供了值（值不为null或者undefined），渲染的元素将不会出更新。为了触发更新，必须更改
+//  给组件传入的props
+
+//  没有默认值时，渲染的元素将会被初始化为未选中
 /**
  * Implements an <input> host component that allows setting these optional
  * props: `checked`, `value`, `defaultChecked`, and `defaultValue`.
@@ -4023,6 +4031,7 @@ function isControlled(props) {
  * See http://www.w3.org/TR/2012/WD-html5-20121025/the-input-element.html
  */
 
+ // 获取主属性
 function getHostProps(element, props) {
   var node = element;
   var checked = props.checked;
@@ -4037,14 +4046,19 @@ function getHostProps(element, props) {
   return hostProps;
 }
 
+//  初始的包裹态
 function initWrapperState(element, props) {
   {
+    //  检查输入属性类型
     ReactControlledValuePropTypes.checkPropTypes('input', props);
-
+    //  如果既有checked,又有defaultChecked，而且没有告警过
     if (props.checked !== undefined && props.defaultChecked !== undefined && !didWarnCheckedDefaultChecked) {
+      //  input类型的元素既有checked又有defaultChecked，输入组件要么是受控的，要么是非受控的
+      //  （要么有checked,要么有defaultChecked,不能都有）
       warning$1(false, '%s contains an input of type %s with both checked and defaultChecked props. ' + 'Input elements must be either controlled or uncontrolled ' + '(specify either the checked prop, or the defaultChecked prop, but not ' + 'both). Decide between using a controlled or uncontrolled input ' + 'element and remove one of these props. More info: ' + 'https://fb.me/react-controlled-components', getCurrentFiberOwnerNameInDevOrNull() || 'A component', props.type);
       didWarnCheckedDefaultChecked = true;
     }
+    //  与上面类似
     if (props.value !== undefined && props.defaultValue !== undefined && !didWarnValueDefaultValue) {
       warning$1(false, '%s contains an input of type %s with both value and defaultValue props. ' + 'Input elements must be either controlled or uncontrolled ' + '(specify either the value prop, or the defaultValue prop, but not ' + 'both). Decide between using a controlled or uncontrolled input ' + 'element and remove one of these props. More info: ' + 'https://fb.me/react-controlled-components', getCurrentFiberOwnerNameInDevOrNull() || 'A component', props.type);
       didWarnValueDefaultValue = true;
@@ -4053,7 +4067,7 @@ function initWrapperState(element, props) {
 
   var node = element;
   var defaultValue = props.defaultValue == null ? '' : props.defaultValue;
-
+  //  设置——wrapperState
   node._wrapperState = {
     initialChecked: props.checked != null ? props.checked : props.defaultChecked,
     initialValue: getToStringValue(props.value != null ? props.value : defaultValue),
@@ -4061,6 +4075,7 @@ function initWrapperState(element, props) {
   };
 }
 
+//  更新选中态
 function updateChecked(element, props) {
   var node = element;
   var checked = props.checked;
@@ -4069,15 +4084,19 @@ function updateChecked(element, props) {
   }
 }
 
+//  更新包裹器
 function updateWrapper(element, props) {
   var node = element;
   {
     var _controlled = isControlled(props);
-
+    //  wrapper不受控，本身受控
     if (!node._wrapperState.controlled && _controlled && !didWarnUncontrolledToControlled) {
+      //  一个组件正在把一个不受控的输入类型改为受控型。输入元素不能从不受控改为受控，反之亦然，
+      //  请在组件中确定到底是用受控还是非受控的组件
       warning$1(false, 'A component is changing an uncontrolled input of type %s to be controlled. ' + 'Input elements should not switch from uncontrolled to controlled (or vice versa). ' + 'Decide between using a controlled or uncontrolled input ' + 'element for the lifetime of the component. More info: https://fb.me/react-controlled-components', props.type);
       didWarnUncontrolledToControlled = true;
     }
+    //  同上
     if (node._wrapperState.controlled && !_controlled && !didWarnControlledToUncontrolled) {
       warning$1(false, 'A component is changing a controlled input of type %s to be uncontrolled. ' + 'Input elements should not switch from controlled to uncontrolled (or vice versa). ' + 'Decide between using a controlled or uncontrolled input ' + 'element for the lifetime of the component. More info: https://fb.me/react-controlled-components', props.type);
       didWarnControlledToUncontrolled = true;
@@ -4092,6 +4111,7 @@ function updateWrapper(element, props) {
   if (value != null) {
     if (type === 'number') {
       if (value === 0 && node.value === '' ||
+      //  如果可能的话，我们希望在这里强制使用数字。
       // We explicitly want to coerce to number here if possible.
       // eslint-disable-next-line
       node.value != value) {
@@ -4101,6 +4121,7 @@ function updateWrapper(element, props) {
       node.value = toString(value);
     }
   } else if (type === 'submit' || type === 'reset') {
+    //  提交或者重置需要删除掉value属性，以免出现空白内容的按钮
     // Submit/reset inputs need the attribute removed completely to avoid
     // blank-text buttons.
     node.removeAttribute('value');
@@ -4108,6 +4129,8 @@ function updateWrapper(element, props) {
   }
 
   if (disableInputAttributeSyncing) {
+    //  当没有同步value属性的时候，react仅仅赋新值无论何时ract组件的初值改变了，
+    //  当值为false时，react什么也不做
     // When not syncing the value attribute, React only assigns a new value
     // whenever the defaultValue React prop has changed. When not present,
     // React does nothing
@@ -4115,6 +4138,10 @@ function updateWrapper(element, props) {
       setDefaultValue(node, props.type, getToStringValue(props.defaultValue));
     }
   } else {
+    //  当同步value属性的时候，这个值从以下属性中获取
+    //  1. react属性的value
+    //  2. react属性的defaultValue
+
     // When syncing the value attribute, the value comes from a cascade of
     // properties:
     //  1. The value React property
@@ -4128,6 +4155,8 @@ function updateWrapper(element, props) {
   }
 
   if (disableInputAttributeSyncing) {
+    //  当没有同步checked属性的时候，这个属性是由react属性的默认值来控制的
+    //  当有新值传入的时候需要更新
     // When not syncing the checked attribute, the attribute is directly
     // controllable from the defaultValue React property. It needs to be
     // updated as new props come in.
@@ -4137,6 +4166,7 @@ function updateWrapper(element, props) {
       node.defaultChecked = !!props.defaultChecked;
     }
   } else {
+    //  当同步checked属性时，它只会在属性被移除时改变，例如从checkbox转换到text input
     // When syncing the checked attribute, it only changes when it needs
     // to be removed, such as transitioning from a checkbox into a text input
     if (props.checked == null && props.defaultChecked != null) {
