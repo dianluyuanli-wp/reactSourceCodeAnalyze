@@ -3685,40 +3685,53 @@ var capitalize = function (token) {
  */
 function getValueForProperty(node, name, expected, propertyInfo) {
   {
+    //  如果是必有参数，直接返回
     if (propertyInfo.mustUseProperty) {
       var propertyName = propertyInfo.propertyName;
 
       return node[propertyName];
     } else {
+      //  获取标签上的属性
       var attributeName = propertyInfo.attributeName;
 
       var stringValue = null;
-
+      //  如果是可重载的布尔值
       if (propertyInfo.type === OVERLOADED_BOOLEAN) {
+        //  如果节点上有attribute
         if (node.hasAttribute(attributeName)) {
           var value = node.getAttribute(attributeName);
+          //  如果值是空串，直接返回true
           if (value === '') {
             return true;
           }
+          //  如果要移除掉这个标签属性
           if (shouldRemoveAttribute(name, expected, propertyInfo, false)) {
             return value;
           }
           if (value === '' + expected) {
+            //  返回期望的值，这个值不一定是字符串型
             return expected;
           }
           return value;
         }
       } else if (node.hasAttribute(attributeName)) {
         if (shouldRemoveAttribute(name, expected, propertyInfo, false)) {
+          //  如果我们捕捉到了一个不应该存在的属性，我们将获取它以便上报
+
           // We had an attribute but shouldn't have had one, so read it
           // for the error message.
           return node.getAttribute(attributeName);
         }
         if (propertyInfo.type === BOOLEAN) {
+          //  如果这个值类型是布尔，那么不管这个值真实是什么
+          //  它事实上的值和预期是一样的
+
           // If this was a boolean, it doesn't matter what the value is
           // the fact that we have it is the same as the expected.
           return expected;
         }
+        //  即使这个属性使用命名空间，我们也使用getAttribute，因为我们假设它的名称空间名称与配置名称相同。
+        //  为了使用getAttributeNS，我们需要本地的名字（在我们的config atm中不存在）
         // Even if this property uses a namespace we use getAttribute
         // because we assume its namespaced name is the same as our config.
         // To use getAttributeNS we need the local name which we don't have
@@ -3729,6 +3742,7 @@ function getValueForProperty(node, name, expected, propertyInfo) {
       if (shouldRemoveAttribute(name, expected, propertyInfo, false)) {
         return stringValue === null ? expected : stringValue;
       } else if (stringValue === '' + expected) {
+        //  获取期望的值，其不一定是string
         return expected;
       } else {
         return stringValue;
@@ -3737,6 +3751,8 @@ function getValueForProperty(node, name, expected, propertyInfo) {
   }
 }
 
+//  获取节点标签上的某个属性，仅用在开发环境ssr的校验中
+//  第三个参数是用来作为一个提示，告诉我们期望的值是什么。某些属性有多个相等的值
 /**
  * Get the value for a attribute on a node. Only used in DEV for SSR validation.
  * The third argument is used as a hint of what the expected value is. Some
@@ -3752,12 +3768,14 @@ function getValueForAttribute(node, name, expected) {
     }
     var value = node.getAttribute(name);
     if (value === '' + expected) {
+      //  如果这个值和期望的值的字符串形式一样，那么返回期望值
       return expected;
     }
     return value;
   }
 }
 
+//  设置节点的属性值
 /**
  * Sets the value for a property on a node.
  *
@@ -3766,18 +3784,24 @@ function getValueForAttribute(node, name, expected) {
  * @param {*} value
  */
 function setValueForProperty(node, name, value, isCustomComponentTag) {
+  //  获取目标属性的配置
   var propertyInfo = getPropertyInfo(name);
+  //  如果要忽略属性，直接返回
   if (shouldIgnoreAttribute(name, propertyInfo, isCustomComponentTag)) {
     return;
   }
+  //  如果要移除属性
   if (shouldRemoveAttribute(name, value, propertyInfo, isCustomComponentTag)) {
     value = null;
   }
+  //  如果这个属性不在特殊列表里，就把他当做普通属性
   // If the prop isn't in the special list, treat it as a simple attribute.
   if (isCustomComponentTag || propertyInfo === null) {
+    //  如果这个属性符合规范
     if (isAttributeNameSafe(name)) {
       var _attributeName = name;
       if (value === null) {
+        //  空值就移除，否则写入字符串
         node.removeAttribute(_attributeName);
       } else {
         node.setAttribute(_attributeName, '' + value);
@@ -3786,38 +3810,45 @@ function setValueForProperty(node, name, value, isCustomComponentTag) {
     return;
   }
   var mustUseProperty = propertyInfo.mustUseProperty;
-
+  //  如果是比要属性
   if (mustUseProperty) {
     var propertyName = propertyInfo.propertyName;
 
     if (value === null) {
       var type = propertyInfo.type;
-
+      //  布尔型设置false，否则空串
       node[propertyName] = type === BOOLEAN ? false : '';
     } else {
+      //  与setAttribute相反，对象的属性很有可能在IE8/9中变成字符串
       // Contrary to `setAttribute`, object properties are properly
       // `toString`ed by IE8/9.
       node[propertyName] = value;
     }
     return;
   }
+  //  剩下的被当做特殊case的属性
   // The rest are treated as attributes with special cases.
   var attributeName = propertyInfo.attributeName,
       attributeNamespace = propertyInfo.attributeNamespace;
 
   if (value === null) {
+    //  值为null直接移除
     node.removeAttribute(attributeName);
   } else {
     var _type = propertyInfo.type;
 
     var attributeValue = void 0;
     if (_type === BOOLEAN || _type === OVERLOADED_BOOLEAN && value === true) {
+      //  类布尔型的，设置值为空串
       attributeValue = '';
     } else {
+      //  在IE8/9中，setAttribute设置对象时只会显示`[object]`，这里使用
+      //  添加''转换为正确的字符串类型
       // `setAttribute` with objects becomes only `[object]` in IE8/9,
       // ('' + value) makes it output the correct toString()-value.
       attributeValue = '' + value;
     }
+    //  如果有命名空间，要使用命名空间
     if (attributeNamespace) {
       node.setAttributeNS(attributeNamespace, attributeName, attributeValue);
     } else {
