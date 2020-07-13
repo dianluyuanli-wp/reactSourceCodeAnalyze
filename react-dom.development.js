@@ -4085,6 +4085,7 @@ function updateChecked(element, props) {
 }
 
 //  更新包裹器
+//  本质上是更新节点的value
 function updateWrapper(element, props) {
   var node = element;
   {
@@ -4177,6 +4178,8 @@ function updateWrapper(element, props) {
 
 function postMountWrapper(element, props, isHydrating) {
   var node = element;
+  //  如果值已经被设置，不要再赋值了，这样可以避免用户在text-input中
+  //  的输入在ssr混合渲染时丢失
 
   // Do not assign value if it is already set. This prevents user text input
   // from being lost during SSR hydration.
@@ -4184,6 +4187,7 @@ function postMountWrapper(element, props, isHydrating) {
     var type = props.type;
     var isButton = type === 'submit' || type === 'reset';
 
+    //  避免在浏览器重置默认值时设置submit/reset button时设置value属性
     // Avoid setting value attribute on submit/reset inputs as it overrides the
     // default value provided by the browser. See: #12872
     if (isButton && (props.value === undefined || props.value === null)) {
@@ -4194,13 +4198,23 @@ function postMountWrapper(element, props, isHydrating) {
 
     // Do not assign value if it is already set. This prevents user text input
     // from being lost during SSR hydration.
+
+    //  如果不在Hydrating
     if (!isHydrating) {
+      //  如果屏蔽输入属性同步
       if (disableInputAttributeSyncing) {
         var value = getToStringValue(props.value);
+        //  当不在同步value属性时，value直接指向react组件的prop,仅仅在其存在
+        //  的时候才进行操作
 
         // When not syncing the value attribute, the value property points
         // directly to the React prop. Only assign it if it exists.
         if (value != null) {
+          //  总是在button上设置使得在button的text可能设置空字符串来清空内容
+          //  不要重复设置value值，如果他为空的话。这会避免潜在的DOM绘制同时避免
+          //  firefox(60.0.1版本)过早的使得必填输入项不可用。当浏览器提供一个空字符串时，
+          //  其将会和当前值进行相等性比较
+
           // Always assign on buttons so that it is possible to assign an
           // empty string to clear button text.
           //
@@ -4209,11 +4223,19 @@ function postMountWrapper(element, props, isHydrating) {
           // prematurely marking required inputs as invalid. Equality is compared
           // to the current value in case the browser provided value is not an
           // empty string.
+
+          //  如果是button,或者值不相同时
           if (isButton || value !== node.value) {
             node.value = toString(value);
           }
         }
       } else {
+        //  当同步value属性时，需要使用warpperState._initialValue来赋值
+        //  它使用如下的值：
+        //  react属性中的value
+        //  react属性中的defaultValue
+        //  空串
+
         // When syncing the value attribute, the value property should use
         // the wrapperState._initialValue property. This uses:
         //
@@ -4227,6 +4249,8 @@ function postMountWrapper(element, props, isHydrating) {
     }
 
     if (disableInputAttributeSyncing) {
+      //  如果不同步value属性，直接根据react的defaultValue来赋值
+
       // When not syncing the value attribute, assign the value attribute
       // directly from the defaultValue React property (when present)
       var defaultValue = getToStringValue(props.defaultValue);
@@ -4234,6 +4258,8 @@ function postMountWrapper(element, props, isHydrating) {
         node.defaultValue = toString(defaultValue);
       }
     } else {
+      //  否则的话，value属性被同步到property,所以我们在前面的value赋值操作中将defaultValue赋值给
+      //  同样的东西
       // Otherwise, the value attribute is synchronized to the property,
       // so we assign defaultValue to the same thing as the value property
       // assignment step above.
@@ -4241,6 +4267,12 @@ function postMountWrapper(element, props, isHydrating) {
     }
   }
 
+  //  通常情况下，在初始化时我们只需做node.checked = node.checked类似操作，
+  //  但是我们需要一个操作来规避chrome的bug：设置defaultChecked有时会影响checked
+  //  (甚至在detachment之后也会发生)
+
+  //  详见https://bugs.chromium.org/p/chromium/issues/detail?id=608416
+  //  我们需要暂时重置name一面干扰radio button组
   // Normally, we'd just do `node.checked = node.checked` upon initial mount, less this bug
   // this is needed to work around a chrome bug where setting defaultChecked
   // will sometimes influence the value of checked (even after detachment).
@@ -4252,6 +4284,8 @@ function postMountWrapper(element, props, isHydrating) {
   }
 
   if (disableInputAttributeSyncing) {
+    //  当不同步输入属性的时候，checked永远不会被赋值。只能通过手动赋值
+    //  我们不想在水合的过程中这样做，避免用户输入没有更改
     // When not syncing the checked attribute, the checked property
     // never gets assigned. It must be manually set. We don't want
     // to do this when hydrating so that existing user input isn't
@@ -4260,6 +4294,8 @@ function postMountWrapper(element, props, isHydrating) {
       updateChecked(element, props);
     }
 
+    //  仅仅设置checked属性，如果有定义的话。这样在控制并不需要的checked属性时
+    //  (text inputs, submit/reset)节约了一次dom写操作
     // Only assign the checked attribute if it is defined. This saves
     // a DOM write when controlling the checked attribute isn't needed
     // (text inputs, submit/reset)
@@ -4268,6 +4304,10 @@ function postMountWrapper(element, props, isHydrating) {
       node.defaultChecked = !!props.defaultChecked;
     }
   } else {
+    //  当同步checked属性时，checked property和attribute在同一时间使用默认值赋值
+    //  react property的选中态
+    //  react属性的defaultChecked
+    //  false
     // When syncing the checked attribute, both the checked property and
     // attribute are assigned at the same time using defaultChecked. This uses:
     //
@@ -4277,27 +4317,32 @@ function postMountWrapper(element, props, isHydrating) {
     node.defaultChecked = !node.defaultChecked;
     node.defaultChecked = !!node._wrapperState.initialChecked;
   }
-
+  //  将node.name还原
   if (name !== '') {
     node.name = name;
   }
 }
 
+//  储存受控状态
 function restoreControlledState(element, props) {
   var node = element;
   updateWrapper(node, props);
   updateNamedCousins(node, props);
 }
-
+//  更新命名的表兄弟组件
 function updateNamedCousins(rootNode, props) {
   var name = props.name;
   if (props.type === 'radio' && name != null) {
     var queryRoot = rootNode;
-
+    //  找到真正的根节点
     while (queryRoot.parentNode) {
       queryRoot = queryRoot.parentNode;
     }
-
+    //  如果rootNode.form不是null,那我们就可以尝试form.elements,但这在IE8中
+    //  有可能会表现的很奇怪。我们也试过form.getElementsByName,但是这个只会返回
+    //  直接的子元素并不会包括哪些使用html5 ‘form=’的input。因为input可能并不在
+    //  form中，甚至不再document中。我们使用本地的querySelectorAll来确保我们
+    //  不会遗漏任何内容
     // If `rootNode.form` was non-null, then we could try `form.elements`,
     // but that sometimes behaves strangely in IE8. We could also try using
     // `form.getElementsByName`, but that will only return direct children
@@ -4305,6 +4350,9 @@ function updateNamedCousins(rootNode, props) {
     // the input might not even be in a form. It might not even be in the
     // document. Let's just use the local `querySelectorAll` to ensure we don't
     // miss anything.
+
+    //  https://www.runoob.com/jsref/met-document-queryselectorall.html
+    //  查找属性为radio,name为特定值的input标签
     var group = queryRoot.querySelectorAll('input[name=' + JSON.stringify('' + name) + '][type="radio"]');
 
     for (var i = 0; i < group.length; i++) {
