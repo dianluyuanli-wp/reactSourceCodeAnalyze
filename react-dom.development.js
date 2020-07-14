@@ -4357,20 +4357,31 @@ function updateNamedCousins(rootNode, props) {
 
     for (var i = 0; i < group.length; i++) {
       var otherNode = group[i];
+      //  如果是根节点或者form不是根节点的form
       if (otherNode === rootNode || otherNode.form !== rootNode.form) {
         continue;
       }
+      //  如果radio是被不同版本的react渲染的，并且已同样的名字渲染进同样的form,这样会报错
+      //  这看上去不错，我们不支持这样做正如我们不支持混用react radio button和
+      //  非react的button
+
       // This will throw if radio buttons rendered by different copies of React
       // and the same name are rendered into the same form (same as #1939).
       // That's probably okay; we don't support it just as we don't support
       // mixing React radio buttons with non-React ones.
       var otherProps = getFiberCurrentPropsFromNode$1(otherNode);
+      //  如果fiber上没有属性，抛错
+      //  reactDOMInput: react和非react的radio输入共用一个名字是不支持的
       !otherProps ? invariant(false, 'ReactDOMInput: Mixing React and non-React radio inputs with the same `name` is not supported.') : void 0;
 
+      //  我们需要在value改变但是input没有感受到event或者value设置时跟踪具名表兄弟
+      //  组件的值
       // We need update the tracked value on the named cousin since the value
       // was changed but the input saw no event or value set
       updateValueIfChanged(otherNode);
 
+      //  如果这是一个受控的radio button组，强制输入之前的选中态来更新
+      //  将会再次checked组件
       // If this is a controlled radio button group, forcing the input that
       // was previously checked to update will cause it to be come re-checked
       // as appropriate.
@@ -4378,6 +4389,12 @@ function updateNamedCousins(rootNode, props) {
     }
   }
 }
+
+//  在chrome中，给特定输入类型设置默认值时会触发输入校验，针对数字，
+//  显示的值将会去掉末尾的小数点，对于邮件输入，chrome将会对不符合
+//  规范的输入进行提醒
+
+//  这里我们检查默认值是否真的有改变，避免这些问题在用户输入的过程中出现
 
 // In Chrome, assigning defaultValue to certain input types triggers input validation.
 // For number inputs, the display value loses trailing decimal points. For email inputs,
@@ -4389,9 +4406,11 @@ function updateNamedCousins(rootNode, props) {
 // https://github.com/facebook/react/issues/7253
 function setDefaultValue(node, type, value) {
   if (
+  //  聚焦数字输入与模糊同步
   // Focused number inputs synchronize on blur. See ChangeEventPlugin.js
   type !== 'number' || node.ownerDocument.activeElement !== node) {
     if (value == null) {
+      //  如果是null 启用initialValue
       node.defaultValue = toString(node._wrapperState.initialValue);
     } else if (node.defaultValue !== toString(value)) {
       node.defaultValue = toString(value);
@@ -4401,6 +4420,7 @@ function setDefaultValue(node, type, value) {
 
 var eventTypes$1 = {
   change: {
+    //  状态登记名
     phasedRegistrationNames: {
       bubbled: 'onChange',
       captured: 'onChangeCapture'
@@ -4409,14 +4429,22 @@ var eventTypes$1 = {
   }
 };
 
+//  创建并且整合change事件
 function createAndAccumulateChangeEvent(inst, nativeEvent, target) {
+  //  获取事件池里的一个事件
   var event = SyntheticEvent.getPooled(eventTypes$1.change, inst, nativeEvent, target);
   event.type = 'change';
+  //  但时间循环需要状态存储是打上标志位
   // Flag this event loop as needing state restore.
+
+  //  状态入队
   enqueueStateRestore(target);
+  //  合并两个状态的事件
   accumulateTwoPhaseDispatches(event);
   return event;
 }
+
+//  为了IE写的兼容逻辑
 /**
  * For IE shims
  */
@@ -4426,13 +4454,25 @@ var activeElementInst = null;
 /**
  * SECTION: handle `change` event
  */
+//  应该使用change事件
 function shouldUseChangeEvent(elem) {
   var nodeName = elem.nodeName && elem.nodeName.toLowerCase();
   return nodeName === 'select' || nodeName === 'input' && elem.type === 'file';
 }
 
+//  手动分发event事件
 function manualDispatchChangeEvent(nativeEvent) {
+  //  获得包装好的事件
   var event = createAndAccumulateChangeEvent(activeElementInst, nativeEvent, getEventTarget(nativeEvent));
+
+  //  如果change和propertychange事件冒泡了，我们会像其他事件那样进行绑定并且通过
+  //  ReactBrowserEventEmitter对其进行处理。因为他没有冒泡，我们手动监听这些事件
+  //  ,我们不得不将其入队并且手动处理抽象事件
+
+  //  分批处理是很有必要的，这样可以确保所有的事件处理句柄在下一次渲染前都会进行处理
+  //  (包括哪些从祖先元素获得的事件句柄而不仅仅是input本身的处理函数)没有这个逻辑的话
+  //  受控组件在同事件冒泡结合是将会产生bug，因为组件是会再次渲染的，value将会在所有
+  //  事件句柄能够运行前被恢复
 
   // If change and propertychange bubbled, we'd just bind to it like all the
   // other events and have it go through ReactBrowserEventEmitter. Since it
@@ -4445,9 +4485,12 @@ function manualDispatchChangeEvent(nativeEvent) {
   // components don't work properly in conjunction with event bubbling because
   // the component is rerendered and the value reverted before all the event
   // handlers can run. See https://github.com/facebook/react/issues/708.
+
+  //  批量更新
   batchedUpdates(runEventInBatch, event);
 }
 
+//  批量运行事件
 function runEventInBatch(event) {
   runEventsInBatch(event);
 }
