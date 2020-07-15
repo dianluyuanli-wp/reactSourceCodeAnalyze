@@ -1255,7 +1255,7 @@ function releaseTraverseContext(traverseContext) {
 
  // 这个是个递归函数，来统计子节点数目，也会执行回调
  // 遍历所有子节点的接口实现
- // traverseContext这个上线文本质上就是一个存储处理结果的对象
+ // traverseContext这个上下文本质上就是一个存储处理结果的对象
 function traverseAllChildrenImpl(children, nameSoFar, callback, traverseContext) {
   //  获取children的类型
   var type = typeof children;
