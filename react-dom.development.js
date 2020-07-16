@@ -4495,13 +4495,17 @@ function runEventInBatch(event) {
   runEventsInBatch(event);
 }
 
+//  获取value变化了的目标实例
 function getInstIfValueChanged(targetInst) {
+  //  根据目标实例获取目标节点
   var targetNode = getNodeFromInstance$1(targetInst);
+  //  如果新旧值不一样，则要更新tracker,并返回实例
   if (updateValueIfChanged(targetNode)) {
     return targetInst;
   }
 }
 
+//  如果是顶层变化，返回目标实例
 function getTargetInstForChangeEvent(topLevelType, targetInst) {
   if (topLevelType === TOP_CHANGE) {
     return targetInst;
@@ -4511,13 +4515,18 @@ function getTargetInstForChangeEvent(topLevelType, targetInst) {
 /**
  * SECTION: handle `input` event
  */
+//  输入事件是否支持
 var isInputEventSupported = false;
 if (canUseDOM) {
+  //  IE9声称支持输入事件，但是在删除文案的时候并不会触发事件，所以我们忽略输入事件
+
   // IE9 claims to support the input event but fails to trigger it when
   // deleting text, so we ignore its input events.
   isInputEventSupported = isEventSupported('input') && (!document.documentMode || document.documentMode > 9);
 }
 
+//  IE小于9的版本，开始追踪传入元素的属性变化并且重写属性值从而我们能够区分用户事件
+//  和js导致的value变化
 /**
  * (For IE <=9) Starts tracking propertychange events on the passed-in element
  * and override the value property so that we can distinguish user events from
@@ -4529,6 +4538,7 @@ function startWatchingForValueChange(target, targetInst) {
   activeElement.attachEvent('onpropertychange', handlePropertyChange);
 }
 
+//  (IE小于9的版本)移除当前跟踪元素的事件监听器，如果存在的话
 /**
  * (For IE <=9) Removes the event listeners from the currently-tracked element,
  * if any exists.
@@ -4542,6 +4552,8 @@ function stopWatchingForValueChange() {
   activeElementInst = null;
 }
 
+//  (IE小于9的版本)控制属性改变的事件，如果当前记过的元素有
+//  变化，send一个change事件，
 /**
  * (For IE <=9) Handles a propertychange event, sending a `change` event if
  * the value of the active element has changed.
@@ -4555,6 +4567,16 @@ function handlePropertyChange(nativeEvent) {
   }
 }
 
+//  控制事件输入的腻子函数
+//  在IE9中，属性的变化在绝大多数情况下都会正确触发输入事件，但是
+//  在文本删除的时候会有bug，此时不会触发输入事件。比较方便的是，selectionchange
+//  在所有的边界情况下都会触发，所以如果value改变了，我们将捕获这个事件并且向前追溯
+
+//  在另外一些情况下，我们并不想调用事件句柄（如果value的改变是有js引发的），所以
+//  我们重新为'.value'定义了一个setter,它是我们的激活元素的value可变，允许我们忽略这些
+//  变化
+
+//  stopWatching是一个空函数，我们调用的原因是为了防止我们错过了blur事件
 function handleEventsForInputEventPolyfill(topLevelType, target, targetInst) {
   if (topLevelType === TOP_FOCUS) {
     // In IE9, propertychange fires for most input events but is buggy and
@@ -4574,9 +4596,15 @@ function handleEventsForInputEventPolyfill(topLevelType, target, targetInst) {
   }
 }
 
+//  针对IE8和9
 // For IE8 and IE9.
+//  获取目标实例的输入事件的polyfill
 function getTargetInstForInputEventPolyfill(topLevelType, targetInst) {
   if (topLevelType === TOP_SELECTION_CHANGE || topLevelType === TOP_KEY_UP || topLevelType === TOP_KEY_DOWN) {
+    //  在selectionChange事件中，targets就是document,这对我们没有帮助，因为哦们
+    //  需要的是当前激活的元素
+    //  99%的时候keydown和keyup都是不必要的。IE8在首次通过脚本设置value后并不会
+    //  触发propertychange事件，只会触发keydown,keypress,keyup事件。
     // On the selectionchange event, the target is just document which isn't
     // helpful for us so just check activeElement instead.
     //
