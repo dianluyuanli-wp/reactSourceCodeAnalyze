@@ -4604,7 +4604,10 @@ function getTargetInstForInputEventPolyfill(topLevelType, targetInst) {
     //  在selectionChange事件中，targets就是document,这对我们没有帮助，因为哦们
     //  需要的是当前激活的元素
     //  99%的时候keydown和keyup都是不必要的。IE8在首次通过脚本设置value后并不会
-    //  触发propertychange事件，只会触发keydown,keypress,keyup事件。
+    //  触发propertychange事件，只会触发keydown,keypress,keyup事件。如果用户重
+    //  复摁一个键我们通过keyup事件捕获摁键，通过keydown事件来触发第一次的摁键事件，
+    //  (这将会有短暂的延迟)，其他的输入方法（例如粘贴）将会正常触发selectionchange
+
     // On the selectionchange event, the target is just document which isn't
     // helpful for us so just check activeElement instead.
     //
@@ -4623,6 +4626,9 @@ function getTargetInstForInputEventPolyfill(topLevelType, targetInst) {
  * SECTION: handle `click` event
  */
 function shouldUseClickEvent(elem) {
+  //  使用click事件去探测checkbox和radio输入的改变，这个方法在所有浏览器中都可用，
+  //  鉴于IE8之前的版本在失去焦点之前不会触发
+
   // Use the `click` event to detect changes to checkbox and radio inputs.
   // This approach works across all browsers, whereas `change` does not fire
   // until `blur` in IE8.
@@ -4630,31 +4636,41 @@ function shouldUseClickEvent(elem) {
   return nodeName && nodeName.toLowerCase() === 'input' && (elem.type === 'checkbox' || elem.type === 'radio');
 }
 
+//  获取click事件的目标实例
+//  感觉是给radio和checkbox用的
 function getTargetInstForClickEvent(topLevelType, targetInst) {
   if (topLevelType === TOP_CLICK) {
     return getInstIfValueChanged(targetInst);
   }
 }
 
+//  获取input或者change事件的目标实例
 function getTargetInstForInputOrChangeEvent(topLevelType, targetInst) {
   if (topLevelType === TOP_INPUT || topLevelType === TOP_CHANGE) {
     return getInstIfValueChanged(targetInst);
   }
 }
 
+//  受控input的失焦事件
 function handleControlledInputBlur(node) {
   var state = node._wrapperState;
-
+  //  非number类型不处理
   if (!state || !state.controlled || node.type !== 'number') {
     return;
   }
 
+  //  没有关闭输入属性的同步
   if (!disableInputAttributeSyncing) {
+    //  如果是受控的，在失焦的时候将value属性赋值给当前的值
     // If controlled, assign the value attribute to the current value on blur
     setDefaultValue(node, 'number', node.value);
   }
 }
 
+//  这个插件创造了一个onChange事件，归一化了表单元素的change事件，这个事件在元素的
+//  value改变而看不见元素闪烁的时候触发一次
+
+//  支持的有：input,textarea,select
 /**
  * This plugin creates an `onChange` event that normalizes change events
  * across form elements. This event fires at a time when it's possible to
@@ -4675,6 +4691,7 @@ var ChangeEventPlugin = {
 
     var getTargetInstFunc = void 0,
         handleEventFunc = void 0;
+    //  如果是使用change事件。就是用对应的getTargetInstFunc方法
     if (shouldUseChangeEvent(targetNode)) {
       getTargetInstFunc = getTargetInstForChangeEvent;
     } else if (isTextInputElement(targetNode)) {
@@ -4691,15 +4708,18 @@ var ChangeEventPlugin = {
     if (getTargetInstFunc) {
       var inst = getTargetInstFunc(topLevelType, targetInst);
       if (inst) {
+        //  如果实例存在，创造一个事件并将其入池，再返回事件
         var event = createAndAccumulateChangeEvent(inst, nativeEvent, nativeEventTarget);
         return event;
       }
     }
 
+    //  如果有对应的句柄函数就执行
     if (handleEventFunc) {
       handleEventFunc(topLevelType, targetNode, targetInst);
     }
 
+    //  在失焦的时候，为number类型的input输入设置值
     // When blurring, set the value attribute for number inputs
     if (topLevelType === TOP_BLUR) {
       handleControlledInputBlur(targetNode);
@@ -4707,6 +4727,12 @@ var ChangeEventPlugin = {
   }
 };
 
+//  注入到事件总线中的模块，这个模块决定了事件插件的顺序，这里提供了一个方便的
+//  方法来引出插件，并不需要打包每个插件。这比让每个插件始终按照一定的顺序来排序
+//  要好，因为他们是被注入的，这个顺序将会被打包的顺序所影响
+
+//  响应式事件插件必须在简单时间插件之前，从而避免事件上的默认行为在简单事件插件
+//  中更为方便
 /**
  * Module that is injectable into `EventPluginHub`, that specifies a
  * deterministic ordering of `EventPlugin`s. A convenient way to reason about
@@ -4718,17 +4744,29 @@ var ChangeEventPlugin = {
  */
 var DOMEventPluginOrder = ['ResponderEventPlugin', 'SimpleEventPlugin', 'EnterLeaveEventPlugin', 'ChangeEventPlugin', 'SelectEventPlugin', 'BeforeInputEventPlugin'];
 
+//  合成UI事件
 var SyntheticUIEvent = SyntheticEvent.extend({
   view: null,
   detail: null
 });
 
+//  摁键和属性的映射
 var modifierKeyToProp = {
   Alt: 'altKey',
   Control: 'ctrlKey',
   Meta: 'metaKey',
   Shift: 'shiftKey'
 };
+
+//  老版本的浏览器（safari小于10，ios safari小于10.2）不支持getModifierState，如果
+//  getModifierState不支持，我们将它映射到一个由事件暴露出的修改键集合中。在这种情况下
+//  锁定键不可用
+
+//  将修改键转换为相对应的事件属性详见
+//  http://www.w3.org/TR/DOM-Level-3-Events/#keys-Modifiers
+
+//  关于原生的方法getModifierState,判断是否摁下了相关修改键
+//  https://www.jc2182.com/javascript/javascript-html-dom-getmodifierstate-event-method.html
 
 // Older browsers (Safari <= 10, iOS Safari <= 10.2) do not support
 // getModifierState. If getModifierState is not supported, we map it to a set of
