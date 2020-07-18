@@ -1878,7 +1878,7 @@ function functionThatReturnsFalse() {
  * @param {DOMEventTarget} nativeEventTarget Target node.
  */
 
- // 合成事件的构造函数
+ // 合成事件的构造函数，mouseEnter等事件都是从这个extend出来的
 function SyntheticEvent(dispatchConfig, targetInst, nativeEvent, nativeEventTarget) {
   {
     //  这些事件的setter或getter会触发报错
@@ -4776,26 +4776,32 @@ var modifierKeyToProp = {
  * @see http://www.w3.org/TR/DOM-Level-3-Events/#keys-Modifiers
  */
 
+ // modifier状态的getter
 function modifierStateGetter(keyArg) {
   var syntheticEvent = this;
   var nativeEvent = syntheticEvent.nativeEvent;
+  //  如果存在原生的getModifierState，直接执行
   if (nativeEvent.getModifierState) {
     return nativeEvent.getModifierState(keyArg);
   }
+  //  否则根据modifierKeyToProp的映射进行判断
   var keyProp = modifierKeyToProp[keyArg];
   return keyProp ? !!nativeEvent[keyProp] : false;
 }
 
+//  获取事件的ModifierState
 function getEventModifierState(nativeEvent) {
   return modifierStateGetter;
 }
 
 var previousScreenX = 0;
 var previousScreenY = 0;
+//  使用标志位来记录x和y轴的移动是否被设置
 // Use flags to signal movementX/Y has already been set
 var isMovementXSet = false;
 var isMovementYSet = false;
 
+//  react自己的reactMouseEvent合成事件
 /**
  * @interface MouseEvent
  * @see http://www.w3.org/TR/DOM-Level-3-Events/
@@ -4817,7 +4823,9 @@ var SyntheticMouseEvent = SyntheticUIEvent.extend({
   relatedTarget: function (event) {
     return event.relatedTarget || (event.fromElement === event.srcElement ? event.toElement : event.fromElement);
   },
+  //  获取x轴上的偏移
   movementX: function (event) {
+    //  优先启用原生的变量
     if ('movementX' in event) {
       return event.movementX;
     }
@@ -4832,6 +4840,7 @@ var SyntheticMouseEvent = SyntheticUIEvent.extend({
 
     return event.type === 'mousemove' ? event.screenX - screenX : 0;
   },
+  //  获取y轴上的偏移量
   movementY: function (event) {
     if ('movementY' in event) {
       return event.movementY;
@@ -4849,6 +4858,7 @@ var SyntheticMouseEvent = SyntheticUIEvent.extend({
   }
 });
 
+//  合成的pointer事件（指针事件）
 /**
  * @interface PointerEvent
  * @see http://www.w3.org/TR/pointerevents/
@@ -4866,6 +4876,7 @@ var SyntheticPointerEvent = SyntheticMouseEvent.extend({
   isPrimary: null
 });
 
+//  事件类型
 var eventTypes$2 = {
   mouseEnter: {
     registrationName: 'onMouseEnter',
@@ -4885,9 +4896,12 @@ var eventTypes$2 = {
   }
 };
 
+//  enter和leave的事件插件
 var EnterLeaveEventPlugin = {
   eventTypes: eventTypes$2,
-
+  //  对于绝大多数我们关心的交互而言，都会有顶层的mouseover和mouseout事件触发，仅仅
+  //  使用mouseout我们不会提取出重复的事件。但是，将鼠标从浏览器外移动到浏览器内部
+  //  并不会触发mouseout事件。在这种情况下，我们使用顶层的mouseover事件
   /**
    * For almost every interaction we care about, there will be both a top-level
    * `mouseover` and `mouseout` event that occurs. Only use `mouseout` so that
@@ -4895,6 +4909,8 @@ var EnterLeaveEventPlugin = {
    * browser from outside will not fire a `mouseout` event. In this case, we use
    * the `mouseover` top-level event.
    */
+
+   // 提取事件
   extractEvents: function (topLevelType, targetInst, nativeEvent, nativeEventTarget) {
     var isOverEvent = topLevelType === TOP_MOUSE_OVER || topLevelType === TOP_POINTER_OVER;
     var isOutEvent = topLevelType === TOP_MOUSE_OUT || topLevelType === TOP_POINTER_OUT;
@@ -4902,7 +4918,7 @@ var EnterLeaveEventPlugin = {
     if (isOverEvent && (nativeEvent.relatedTarget || nativeEvent.fromElement)) {
       return null;
     }
-
+    //  必须不是鼠标或者指针的in或out事件，否则忽略
     if (!isOutEvent && !isOverEvent) {
       // Must not be a mouse or pointer in or out - ignoring.
       return null;
@@ -4910,9 +4926,13 @@ var EnterLeaveEventPlugin = {
 
     var win = void 0;
     if (nativeEventTarget.window === nativeEventTarget) {
+      //  nativeEventTarget可能是一个weindow对象
+
       // `nativeEventTarget` is probably a window object.
       win = nativeEventTarget;
     } else {
+      //  todo: 找出为什么ownerDocument在ie8下有的时候是undefined
+
       // TODO: Figure out why `ownerDocument` is sometimes undefined in IE8.
       var doc = nativeEventTarget.ownerDocument;
       if (doc) {
@@ -4926,15 +4946,20 @@ var EnterLeaveEventPlugin = {
     var to = void 0;
     if (isOutEvent) {
       from = targetInst;
+      //  获取相关节点
       var related = nativeEvent.relatedTarget || nativeEvent.toElement;
       to = related ? getClosestInstanceFromNode(related) : null;
     } else {
+      //  从浏览器外部移动到一个节点
+
       // Moving to a node from outside the window.
       from = null;
       to = targetInst;
     }
 
     if (from === to) {
+      //  对于我们管理的组件没有什么事件存在
+
       // Nothing pertains to our managed components.
       return null;
     }
@@ -4944,6 +4969,7 @@ var EnterLeaveEventPlugin = {
         enterEventType = void 0,
         eventTypePrefix = void 0;
 
+    //  针对鼠标和指针设置对应的接口
     if (topLevelType === TOP_MOUSE_OUT || topLevelType === TOP_MOUSE_OVER) {
       eventInterface = SyntheticMouseEvent;
       leaveEventType = eventTypes$2.mouseLeave;
@@ -4956,59 +4982,73 @@ var EnterLeaveEventPlugin = {
       eventTypePrefix = 'pointer';
     }
 
+    //  获取from和to的节点
     var fromNode = from == null ? win : getNodeFromInstance$1(from);
     var toNode = to == null ? win : getNodeFromInstance$1(to);
 
+    //  从事件池中获取一个leave事件
     var leave = eventInterface.getPooled(leaveEventType, from, nativeEvent, nativeEventTarget);
     leave.type = eventTypePrefix + 'leave';
     leave.target = fromNode;
     leave.relatedTarget = toNode;
 
+    //  从事件池中获取一个outer事件
     var enter = eventInterface.getPooled(enterEventType, to, nativeEvent, nativeEventTarget);
     enter.type = eventTypePrefix + 'enter';
     enter.target = toNode;
     enter.relatedTarget = fromNode;
 
+    //  遍历enter和leave事件，执行上面绑定的回调
     accumulateEnterLeaveDispatches(leave, enter, from, to);
 
     return [leave, enter];
   }
 };
 
+//  实现行内的Object.is的腻子方法来避免引入使用者安装自己的版本
 /**
  * inlined Object.is polyfill to avoid requiring consumers ship their own
  * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/is
  */
 function is(x, y) {
+  //  只有Nan!==自身返回true， NaN === NaN返回false
   return x === y && (x !== 0 || 1 / x === 1 / y) || x !== x && y !== y // eslint-disable-line no-self-compare
   ;
 }
 
 var hasOwnProperty$1 = Object.prototype.hasOwnProperty;
 
+//  通过遍历对象的键值来执行比较方法，如果有任意的键不严格相等，则返回false，当所有的键值
+//  一致时返回true
+
 /**
  * Performs equality by iterating through keys on an object and returning false
  * when any key has values which are not strictly equal between the arguments.
  * Returns true when the values of all keys are strictly equal.
  */
+
+ // 浅比较
 function shallowEqual(objA, objB) {
   if (is(objA, objB)) {
     return true;
   }
 
+  //  二者中有人以一个不是对象或者是null的返回false
   if (typeof objA !== 'object' || objA === null || typeof objB !== 'object' || objB === null) {
     return false;
   }
 
   var keysA = Object.keys(objA);
   var keysB = Object.keys(objB);
-
+  //  有缺key的，直接返回
   if (keysA.length !== keysB.length) {
     return false;
   }
 
+  //  一次比较objA的各个键值的内容
   // Test for A's keys different from B.
   for (var i = 0; i < keysA.length; i++) {
+    //  一旦objb没有a中的对应属性或者二者的键值不一致，返回false
     if (!hasOwnProperty$1.call(objB, keysA[i]) || !is(objA[keysA[i]], objB[keysA[i]])) {
       return false;
     }
@@ -5016,6 +5056,12 @@ function shallowEqual(objA, objB) {
 
   return true;
 }
+
+//  ReactInstanceMap维护了一个面向公共的状态化实例（key）到内部表现（value）
+//  的映射。这使得用户方法能够接收面向用户的实例作为参数并且将他们映射回内部方法
+
+//  注意，这个模块现在是共享的，并且被认为是无状态的，如果这成为事实上的映射，
+//  这种关系将会被打破
 
 /**
  * `ReactInstanceMap` maintains a mapping from a public facing stateful
@@ -5027,29 +5073,35 @@ function shallowEqual(objA, objB) {
  * If this becomes an actual Map, that will break.
  */
 
+ // 这个API应该被称为“delete”，但我们必须确保始终将这些转换为字符串以支持IE。当这个
+ // 变化完全支持的时候，我们将对其改名
 /**
  * This API should be called `delete` but we'd have to make sure to always
  * transform these to strings for IE support. When this transform is fully
  * supported we can rename it.
  */
 
-
+//  由状态化实例获取react内部的fiber
 function get(key) {
   return key._reactInternalFiber;
 }
 
+//  判断是否存在_reactInternalFiber
 function has(key) {
   return key._reactInternalFiber !== undefined;
 }
 
+//  设置
 function set(key, value) {
   key._reactInternalFiber = value;
 }
 
+//  不要改变下面两个值，这是给react 开发者工具用的
 // Don't change these two values. They're used by React Dev Tools.
 var NoEffect = /*              */0;
 var PerformedWork = /*         */1;
 
+//  你可以改变剩下的
 // You can change the rest (and add more).
 var Placement = /*             */2;
 var Update = /*                */4;
@@ -5062,9 +5114,11 @@ var Ref = /*                   */128;
 var Snapshot = /*              */256;
 var Passive = /*               */512;
 
+//  
 // Passive & Update & Callback & Ref & Snapshot
 var LifecycleEffectMask = /*   */932;
 
+//  所有主效果的集合
 // Union of all host effects
 var HostEffectMask = /*        */1023;
 
@@ -5077,14 +5131,21 @@ var MOUNTING = 1;
 var MOUNTED = 2;
 var UNMOUNTED = 3;
 
+//  是否是挂载好的fiber的实现
 function isFiberMountedImpl(fiber) {
   var node = fiber;
   if (!fiber.alternate) {
+    //  如果这里没有alternate，这有可能是一个并没有被插入dom的新树，
+    //  否则的话，这里会有一个被阻塞的插入操作等待执行
+
     // If there is no alternate, this might be a new tree that isn't inserted
     // yet. If it is, then it will have a pending insertion effect on it.
+
+    //  将node.effectTag与Placement进行按位与的操作
     if ((node.effectTag & Placement) !== NoEffect) {
       return MOUNTING;
     }
+    //  在fiber上一直寻找return
     while (node.return) {
       node = node.return;
       if ((node.effectTag & Placement) !== NoEffect) {
@@ -5096,32 +5157,46 @@ function isFiberMountedImpl(fiber) {
       node = node.return;
     }
   }
+  //  如果是组件树的根节点，则表示已经挂载
   if (node.tag === HostRoot) {
+    //  todo:  在调用renderContainerIntoSubtree的时候检查是否是内嵌的HostRoot
+
     // TODO: Check if this was a nested HostRoot when used with
     // renderContainerIntoSubtree.
     return MOUNTED;
   }
+  //  如果我们并没有命中根节点，那么意味着我们在一颗失去连接的树中（该树并没有被挂载）
   // If we didn't hit the root, that means that we're in an disconnected tree
   // that has been unmounted.
   return UNMOUNTED;
 }
 
+//  判断fiber是否挂载
 function isFiberMounted(fiber) {
   return isFiberMountedImpl(fiber) === MOUNTED;
 }
 
+//  判断组件是否挂载
 function isMounted(component) {
   {
+    //  获取当前的owner
     var owner = ReactCurrentOwner$1.current;
+    //  如果owner是类组件
     if (owner !== null && owner.tag === ClassComponent) {
       var ownerFiber = owner;
       var instance = ownerFiber.stateNode;
+      //  类组件下会报错
+      //  _warnedAboutRefsInRender这个标志位确保只会报一次错
+      //  某个fiber正在render函数内访问isMounted，render函数应该是
+      //  关于属性和状态的纯函数，它不应该去获取过去render中的老旧数据
+      //  例如refs, 可以进这部分逻辑移动到componentDidMount或者componentDidUpdate中
       !instance._warnedAboutRefsInRender ? warningWithoutStack$1(false, '%s is accessing isMounted inside its render() function. ' + 'render() should be a pure function of props and state. It should ' + 'never access something that requires stale data from the previous ' + 'render, such as refs. Move this logic to componentDidMount and ' + 'componentDidUpdate instead.', getComponentName(ownerFiber.type) || 'A component') : void 0;
       instance._warnedAboutRefsInRender = true;
     }
   }
 
   var fiber = get(component);
+  //  如果fiber不存在返回false
   if (!fiber) {
     return false;
   }
