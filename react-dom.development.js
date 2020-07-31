@@ -5203,33 +5203,100 @@ function isMounted(component) {
   return isFiberMountedImpl(fiber) === MOUNTED;
 }
 
+//  断言一个fiber是否加载
 function assertIsMounted(fiber) {
   !(isFiberMountedImpl(fiber) === MOUNTED) ? invariant(false, 'Unable to find node on an unmounted component.') : void 0;
 }
 
+//  这里附上fiber的类型定义
+
+// interface Fiber {
+//   /**
+//    * ⚛️ 节点的类型信息
+//    */
+//   // 标记 Fiber 类型, 例如函数组件、类组件、宿主组件
+//   tag: WorkTag,
+//   // 节点元素类型, 是具体的类组件、函数组件、宿主组件(字符串)
+//   type: any,
+
+//   /**
+//    * ⚛️ 结构信息
+//    */ 
+//   return: Fiber | null,
+//   child: Fiber | null,
+//   sibling: Fiber | null,
+//   // 子节点的唯一键, 即我们渲染列表传入的key属性
+//   key: null | string,
+
+//   /**
+//    * ⚛️ 节点的状态
+//    */
+//   // 节点实例(状态)：
+//   //        对于宿主组件，这里保存宿主组件的实例, 例如DOM节点。
+//   //        对于类组件来说，这里保存类组件的实例
+//   //        对于函数组件说，这里为空，因为函数组件没有实例
+//   stateNode: any,
+//   // 新的、待处理的props
+//   pendingProps: any,
+//   // 上一次渲染的props
+//   memoizedProps: any, // The props used to create the output.
+//   // 上一次渲染的组件状态
+//   memoizedState: any,
+
+
+//   /**
+//    * ⚛️ 副作用
+//    */
+//   // 当前节点的副作用类型，例如节点更新、删除、移动
+//   effectTag: SideEffectTag,
+//   // 和节点关系一样，React 同样使用链表来将所有有副作用的Fiber连接起来
+//   nextEffect: Fiber | null,
+
+//   /**
+//    * ⚛️ 替身
+//    * 指向旧树中的节点
+//    */
+//   alternate: Fiber | null,
+// }
+
+//  使用慢路径查找当前fiber
 function findCurrentFiberUsingSlowPath(fiber) {
   var alternate = fiber.alternate;
   if (!alternate) {
+    //  如果没有alternate,那么我们只用去检查组件是否挂载
     // If there is no alternate, then we only need to check if it is mounted.
     var state = isFiberMountedImpl(fiber);
+    //  不能在一个未挂载的组件上查找节点
     !(state !== UNMOUNTED) ? invariant(false, 'Unable to find node on an unmounted component.') : void 0;
     if (state === MOUNTING) {
       return null;
     }
     return fiber;
   }
+  //  如果我们有两个可能的分支（分别对应fiber或者其alternate），
+  //  我们将回溯到根节点来确认根节点到底指向哪条路径,在途中我们可
+  //  能遇到一两个特殊case，此时我们会去处理掉他们
+
   // If we have two possible branches, we'll walk backwards up to the root
   // to see what path the root points to. On the way we may hit one of the
   // special cases and we'll deal with them.
+
+  //  alternate表示fiber对象中指向改变前的节点的引用
   var a = fiber;
   var b = alternate;
   while (true) {
+    //  表示a的父节点
     var parentA = a.return;
+    //  表示a的父节点的替代
     var parentB = parentA ? parentA.alternate : null;
+    //  如果return或者alternate为假值，说明到了根节点，break
     if (!parentA || !parentB) {
       // We're at the root.
       break;
     }
+
+    //  如果两个父fiber的备份指向同一个子元素，我们能够假设这个子元素就是当前节点
+    //  这将在我们紧急救助低优先级child时发生： 紧急救助的fiber的子元素复用了当前的子元素
 
     // If both copies of the parent fiber point to the same child, we can
     // assume that the child is current. This happens when we bailout on low
@@ -5238,17 +5305,23 @@ function findCurrentFiberUsingSlowPath(fiber) {
       var child = parentA.child;
       while (child) {
         if (child === a) {
+          //  我们判定A就是当前的分支，返回fiber
+
           // We've determined that A is the current branch.
           assertIsMounted(parentA);
           return fiber;
         }
         if (child === b) {
+          //  我们判定B就是当前的分支，返回alternate
+
           // We've determined that B is the current branch.
           assertIsMounted(parentA);
           return alternate;
         }
+        //  查找下一个兄弟元素
         child = child.sibling;
       }
+      //  正在挂载的节点是没有alternate的
       // We should never have an alternate for any mounting node. So the only
       // way this could possibly happen is if this was unmounted, if at all.
       invariant(false, 'Unable to find node on an unmounted component.');
