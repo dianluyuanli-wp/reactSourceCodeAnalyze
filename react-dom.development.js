@@ -5295,7 +5295,7 @@ function findCurrentFiberUsingSlowPath(fiber) {
       break;
     }
 
-    //  如果两个父fiber的备份指向同一个子元素，我们能够假设这个子元素就是当前节点
+    //  如果两个父fiber的备份的子元素相同，我们能够假设这个子元素就是当前节点
     //  这将在我们紧急救助低优先级child时发生： 紧急救助的fiber的子元素复用了当前的子元素
 
     // If both copies of the parent fiber point to the same child, we can
@@ -5328,35 +5328,52 @@ function findCurrentFiberUsingSlowPath(fiber) {
     }
 
     if (a.return !== b.return) {
+      //  a的return如果和b的return指向不同的fiber.我们假设一个节点return的指向永远不会交叉，
+      //  A必然属于A.return的子节点的集合，B必然属于B.return的子节点的集合。
+
       // The return pointer of A and the return pointer of B point to different
       // fibers. We assume that return pointers never criss-cross, so A must
       // belong to the child set of A.return, and B must belong to the child
       // set of B.return.
+
+      //  如果a和b的上一个节点不一致，那么就各自都上溯一个节点
       a = parentA;
       b = parentB;
     } else {
+      //  如果a和b的return指向相同的fiber，我们将去使用默认的slow path:遍历每一个父元素的备份的子元素的集合
+      //  查找子元素到底属于哪个集合
+
       // The return pointers point to the same fiber. We'll have to use the
       // default, slow path: scan the child sets of each parent alternate to see
       // which child belongs to which set.
       //
       // Search parent A's child set
+
+      //  查找父节点A的子节点集合
       var didFindChild = false;
+      //  标记子节点
       var _child = parentA.child;
       while (_child) {
+        //  如果当前child等于a
         if (_child === a) {
+          //  找到子节点
           didFindChild = true;
+          //  a和b都上溯
           a = parentA;
           b = parentB;
           break;
         }
+        //  如果当前子节点等于b
         if (_child === b) {
           didFindChild = true;
           b = parentA;
           a = parentB;
           break;
         }
+        //  如果这一轮没找到，查找下一个兄弟节点
         _child = _child.sibling;
       }
+      //  如果没找到，继续在B的子元素集合里找
       if (!didFindChild) {
         // Search parent B's child set
         _child = parentB.child;
@@ -5375,20 +5392,31 @@ function findCurrentFiberUsingSlowPath(fiber) {
           }
           _child = _child.sibling;
         }
+        //  如果还没有找到，直接报错
+        //  在两个父元素的集合中都没有找到子节点，这表示react中可能有同return指针相关的bug
+        //  请上报这个错误
         !didFindChild ? invariant(false, 'Child was not found in either parent set. This indicates a bug in React related to the return pointer. Please file an issue.') : void 0;
       }
     }
-
+    //  如果a的替代不等于b,也报错
+    //  返回的fibers必须互为对方的替代，这可能是react内部的bug，请上报issue
     !(a.alternate === b) ? invariant(false, 'Return fibers should always be each others\' alternates. This error is likely caused by a bug in React. Please file an issue.') : void 0;
   }
+  //  如果根节点不是主容器，我们当前就在一个未挂载的树中
   // If the root is not a host container, we're in a disconnected tree. I.e.
   // unmounted.
+
+  //  如果a的tab不等于HostRoot,报错
+  //  没有办法在未挂载的组件上查找节点
   !(a.tag === HostRoot) ? invariant(false, 'Unable to find node on an unmounted component.') : void 0;
+  //  如果a.stateNode.current等于a
   if (a.stateNode.current === a) {
     // We've determined that A is the current branch.
+    //  我们确认a是点前的分支
     return fiber;
   }
   // Otherwise B has to be current branch.
+  //  否则b就是当前的分支。
   return alternate;
 }
 
