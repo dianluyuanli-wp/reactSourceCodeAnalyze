@@ -5268,9 +5268,11 @@ function findCurrentFiberUsingSlowPath(fiber) {
     var state = isFiberMountedImpl(fiber);
     //  不能在一个未挂载的组件上查找节点
     !(state !== UNMOUNTED) ? invariant(false, 'Unable to find node on an unmounted component.') : void 0;
+    //  如果正在挂载，返回null
     if (state === MOUNTING) {
       return null;
     }
+    //  如果已挂载，返回fiber节点本身
     return fiber;
   }
   //  如果我们有两个可能的分支（分别对应fiber或者其alternate），
@@ -5301,6 +5303,7 @@ function findCurrentFiberUsingSlowPath(fiber) {
     // If both copies of the parent fiber point to the same child, we can
     // assume that the child is current. This happens when we bailout on low
     // priority: the bailed out fiber's child reuses the current child.
+    //  如果parentA和parentB指向有同样的资源数，表示从这里开始分叉，从此遍历下一级的所有子元素
     if (parentA.child === parentB.child) {
       var child = parentA.child;
       while (child) {
