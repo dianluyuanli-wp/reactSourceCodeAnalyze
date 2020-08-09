@@ -5259,6 +5259,10 @@ function assertIsMounted(fiber) {
 //   alternate: Fiber | null,
 // }
 
+//  目前看来react fiber树的更新策略是从根节点逐次往下走的
+//  child只会指向第一个子元素，其余的子元素通过长子的sibling来获取
+//  其余的子元素的return指向父节点
+
 //  使用慢路径查找当前fiber
 function findCurrentFiberUsingSlowPath(fiber) {
   var alternate = fiber.alternate;
@@ -5303,9 +5307,13 @@ function findCurrentFiberUsingSlowPath(fiber) {
     // If both copies of the parent fiber point to the same child, we can
     // assume that the child is current. This happens when we bailout on low
     // priority: the bailed out fiber's child reuses the current child.
-    //  如果parentA和parentB指向有同样的资源数，表示从这里开始分叉，从此遍历下一级的所有子元素
+
+    //  如果parentA和parentB有同样的子节点，表示有可能从这里开始分叉，
+    //  从此遍历下一级的所有子元素
+    //  如果这一层级都没有，那么就表示在下一层
     if (parentA.child === parentB.child) {
       var child = parentA.child;
+      //  在第一子元素这个层级遍历，看看有没有目标
       while (child) {
         if (child === a) {
           //  我们判定A就是当前的分支，返回fiber
