@@ -5377,6 +5377,7 @@ function findCurrentFiberUsingSlowPath(fiber) {
         //  如果当前子节点等于b
         if (_child === b) {
           didFindChild = true;
+          //  a、b位置互换
           b = parentA;
           a = parentB;
           break;
@@ -5421,6 +5422,7 @@ function findCurrentFiberUsingSlowPath(fiber) {
   //  没有办法在未挂载的组件上查找节点
   !(a.tag === HostRoot) ? invariant(false, 'Unable to find node on an unmounted component.') : void 0;
   //  如果a.stateNode.current等于a
+  //  stateNode实际上指向组件实例
   if (a.stateNode.current === a) {
     // We've determined that A is the current branch.
     //  我们确认a是点前的分支
@@ -5431,39 +5433,56 @@ function findCurrentFiberUsingSlowPath(fiber) {
   return alternate;
 }
 
+//  找到当前父节点下的第一个根元素节点
 function findCurrentHostFiber(parent) {
+  //  当前的fiber（真实挂载的节点）
   var currentParent = findCurrentFiberUsingSlowPath(parent);
+  //  如果没有返回null
   if (!currentParent) {
     return null;
   }
 
+  //  我们将向下遍历，去寻找第一个HostComponent或者Text类型的节点
   // Next we'll drill down this component to find the first HostComponent/Text.
   var node = currentParent;
   while (true) {
+    //  如果已经是根节点了，直接返回
+    //  先遍历自己的所有子元素，然后遍历兄弟节点的
     if (node.tag === HostComponent || node.tag === HostText) {
       return node;
     } else if (node.child) {
+      //  这一句十分迷惑，这是干啥？
       node.child.return = node;
+      //  走到下一个节点
       node = node.child;
       continue;
     }
+    //  如果没有子节点，且找到了当前节点(也就是上面的逻辑都没走到)，返回null
     if (node === currentParent) {
       return null;
     }
+    //  如果没有兄弟节点就上溯
     while (!node.sibling) {
+      //  没有父节点或者父节点为初始节点，返回null
       if (!node.return || node.return === currentParent) {
         return null;
       }
+      //  否则上溯
       node = node.return;
     }
+    //  否则指向自己的下一个兄弟节点，继续深度优先遍历
     node.sibling.return = node.return;
     node = node.sibling;
   }
+  //  这里需要返回null,但是eslint会报错
+
   // Flow needs the return null here, but ESLint complains about it.
   // eslint-disable-next-line no-unreachable
   return null;
 }
 
+//  找到当前父节点的第一个非HostPortal子树下的根元素节点
+//  功能跟上面一个类似
 function findCurrentHostFiberWithNoPortals(parent) {
   var currentParent = findCurrentFiberUsingSlowPath(parent);
   if (!currentParent) {
@@ -5476,6 +5495,7 @@ function findCurrentHostFiberWithNoPortals(parent) {
     if (node.tag === HostComponent || node.tag === HostText) {
       return node;
     } else if (node.child && node.tag !== HostPortal) {
+      //  如果是HostPortal，直接放弃这个子树入口
       node.child.return = node;
       node = node.child;
       continue;
@@ -5497,10 +5517,13 @@ function findCurrentHostFiberWithNoPortals(parent) {
   return null;
 }
 
+//  增加事件冒泡监听器
 function addEventBubbleListener(element, eventType, listener) {
+  //  第三个参数控制触发的时机，false表示在捕获是不监听
   element.addEventListener(eventType, listener, false);
 }
 
+//  增加事件捕获监听器
 function addEventCaptureListener(element, eventType, listener) {
   element.addEventListener(eventType, listener, true);
 }
@@ -5510,6 +5533,7 @@ function addEventCaptureListener(element, eventType, listener) {
  * @see http://www.w3.org/TR/css3-animations/#AnimationEvent-interface
  * @see https://developer.mozilla.org/en-US/docs/Web/API/AnimationEvent
  */
+//  定义同步动画事件
 var SyntheticAnimationEvent = SyntheticEvent.extend({
   animationName: null,
   elapsedTime: null,
@@ -5520,6 +5544,7 @@ var SyntheticAnimationEvent = SyntheticEvent.extend({
  * @interface Event
  * @see http://www.w3.org/TR/clipboard-apis/
  */
+//  同步的剪贴板事件
 var SyntheticClipboardEvent = SyntheticEvent.extend({
   clipboardData: function (event) {
     return 'clipboardData' in event ? event.clipboardData : window.clipboardData;
@@ -5530,10 +5555,14 @@ var SyntheticClipboardEvent = SyntheticEvent.extend({
  * @interface FocusEvent
  * @see http://www.w3.org/TR/DOM-Level-3-Events/
  */
+//  同步的聚焦事件
 var SyntheticFocusEvent = SyntheticUIEvent.extend({
   relatedTarget: null
 });
 
+//  charCode代表真实的charCode,该方法支持String.fromCharCode，正是因为如此，只有对应可打印
+//  的字符的键能够产生可用的charCode,唯一的例外就是enter键。tab键被认为是非打印键所以不会有charCode
+//  这可能是因为它在浏览器端不会产生tab字符
 /**
  * `charCode` represents the actual "character code" and is safe to use with
  * `String.fromCharCode`. As such, only keys that correspond to printable
