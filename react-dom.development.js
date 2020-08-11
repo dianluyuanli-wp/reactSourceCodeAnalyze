@@ -5573,28 +5573,37 @@ var SyntheticFocusEvent = SyntheticUIEvent.extend({
  * @param {object} nativeEvent Native browser event.
  * @return {number} Normalized `charCode` property.
  */
+//  获取摁键事件的charCode
 function getEventCharCode(nativeEvent) {
   var charCode = void 0;
+  //  先获取keyCode
   var keyCode = nativeEvent.keyCode;
 
   if ('charCode' in nativeEvent) {
+    //  如果有charCode,读取charCode
     charCode = nativeEvent.charCode;
 
+    //  firefox不会给enter设置charCode,对照keyCode进行检查
     // FF does not set `charCode` for the Enter-key, check against `keyCode`.
     if (charCode === 0 && keyCode === 13) {
       charCode = 13;
     }
   } else {
+    //  IE8 没有实现charCode,但是keyCode能够取到正确的值
     // IE8 does not implement `charCode`, but `keyCode` has the correct value.
     charCode = keyCode;
   }
 
+  //  windows上的IE和Edge以及windows和linux上的chrome和safari会把enter的charCode
+  //  在ctrl摁下的时候变成10
   // IE and Edge (on Windows) and Chrome / Safari (on Windows and Linux)
   // report Enter as charCode 10 when ctrl is pressed.
   if (charCode === 10) {
     charCode = 13;
   }
 
+  //  部分不可打印的键是通过charCode或者keyCode上报的。扔掉他们
+  //  不能扔掉可打印(或者可打印)的enter键
   // Some non-printable keys are reported in `charCode`/`keyCode`, discard them.
   // Must not discard the (non-)printable Enter-key.
   if (charCode >= 32 || charCode === 13) {
@@ -5604,6 +5613,7 @@ function getEventCharCode(nativeEvent) {
   return 0;
 }
 
+//  标准化废弃的html5键值
 /**
  * Normalization of deprecated HTML5 `key` values
  * @see https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent#Key_names
@@ -5623,6 +5633,7 @@ var normalizeKey = {
   MozPrintableKey: 'Unidentified'
 };
 
+//  将遗留的keyCode转换到html5键值
 /**
  * Translation from legacy `keyCode` to HTML5 `key`
  * Only special keys supported, all others depend on keyboard layout or browser
@@ -5671,10 +5682,15 @@ var translateToKey = {
  * @param {object} nativeEvent Native browser event.
  * @return {string} Normalized `key` property.
  */
+//  获取事件的key
 function getEventKey(nativeEvent) {
   if (nativeEvent.key) {
+    //  标准化由于工作草案规范浏览器实现不一致的值
     // Normalize inconsistent values reported by browsers due to
     // implementations of a working draft specification.
+
+    //  firefox实现了key但是返回MozPrintableKey作为素有可打印字符的键名（标记为Unidentified）
+    //  这里忽略掉
 
     // FireFox implements `key` but returns `MozPrintableKey` for all
     // printable characters (normalized to `Unidentified`), ignore it.
@@ -5684,15 +5700,22 @@ function getEventKey(nativeEvent) {
     }
   }
 
+  //  浏览器没有实现key,那我们尽可能去兼容
+
   // Browser does not implement `key`, polyfill as much of it as we can.
   if (nativeEvent.type === 'keypress') {
     var charCode = getEventCharCode(nativeEvent);
+
+    //  enter键在技术上被认为既是可打印的也是不可打印的，因此可以被keypress捕获
+    //  其他的不可打印键就不可以了
 
     // The enter-key is technically both printable and non-printable and can
     // thus be captured by `keypress`, no other non-printable key should.
     return charCode === 13 ? 'Enter' : String.fromCharCode(charCode);
   }
   if (nativeEvent.type === 'keydown' || nativeEvent.type === 'keyup') {
+    //  尽管用户键盘的布局决定了真实键码的值，但是几乎所有的功能键都有一个通用的值
+
     // While user keyboard layout determines the actual meaning of each
     // `keyCode` value, almost all function keys have a universal value.
     return translateToKey[nativeEvent.keyCode] || 'Unidentified';
@@ -5704,6 +5727,7 @@ function getEventKey(nativeEvent) {
  * @interface KeyboardEvent
  * @see http://www.w3.org/TR/DOM-Level-3-Events/
  */
+//  同步的键盘事件
 var SyntheticKeyboardEvent = SyntheticUIEvent.extend({
   key: getEventKey,
   location: null,
@@ -5715,9 +5739,14 @@ var SyntheticKeyboardEvent = SyntheticUIEvent.extend({
   locale: null,
   getModifierState: getEventModifierState,
   // Legacy Interface
+  //  历史接口
   charCode: function (event) {
+    //  charCode是摁键事件，表示的是真实地可打印字符所代表的值
     // `charCode` is the result of a KeyPress event and represents the value of
     // the actual printable character.
+
+    //  keyPress事件被遗弃了，但是它的替代者并没有最终确定，在各个主流浏览器中的实现也不一样
+    //  只有keyPress事件有charCode
 
     // KeyPress is deprecated, but its replacement is not yet final and not
     // implemented in any major browser. Only KeyPress has charCode.
@@ -5727,9 +5756,13 @@ var SyntheticKeyboardEvent = SyntheticUIEvent.extend({
     return 0;
   },
   keyCode: function (event) {
+    //  keycode是keyDown和keyUp事件组合的结果，代表的是物理键盘的值
     // `keyCode` is the result of a KeyDown/Up event and represents the value of
     // physical keyboard key.
 
+    //  实际的值取决于用户键盘的排布，这个事件不能被废弃。假设美国键盘的排布
+    //  为美国和欧洲用户提供了令人吃惊的准确映射，由于这个原因，在此时最好有用户自行实现
+  
     // The actual meaning of the value depends on the users' keyboard layout
     // which cannot be detected. Assuming that it is a US keyboard layout
     // provides a surprisingly accurate mapping for US and European users.
@@ -5740,6 +5773,7 @@ var SyntheticKeyboardEvent = SyntheticUIEvent.extend({
     return 0;
   },
   which: function (event) {
+    //  which是keyCode或者charCode的别名，取决于具体的事件类型
     // `which` is an alias for either `keyCode` or `charCode` depending on the
     // type of the event.
     if (event.type === 'keypress') {
@@ -5756,6 +5790,7 @@ var SyntheticKeyboardEvent = SyntheticUIEvent.extend({
  * @interface DragEvent
  * @see http://www.w3.org/TR/DOM-Level-3-Events/
  */
+//  同步的拖拽事件
 var SyntheticDragEvent = SyntheticMouseEvent.extend({
   dataTransfer: null
 });
@@ -5764,6 +5799,7 @@ var SyntheticDragEvent = SyntheticMouseEvent.extend({
  * @interface TouchEvent
  * @see http://www.w3.org/TR/touch-events/
  */
+//  同步的touch事件
 var SyntheticTouchEvent = SyntheticUIEvent.extend({
   touches: null,
   targetTouches: null,
@@ -5780,6 +5816,7 @@ var SyntheticTouchEvent = SyntheticUIEvent.extend({
  * @see http://www.w3.org/TR/2009/WD-css3-transitions-20090320/#transition-events-
  * @see https://developer.mozilla.org/en-US/docs/Web/API/TransitionEvent
  */
+//  同步的过渡事件
 var SyntheticTransitionEvent = SyntheticEvent.extend({
   propertyName: null,
   elapsedTime: null,
@@ -5790,18 +5827,26 @@ var SyntheticTransitionEvent = SyntheticEvent.extend({
  * @interface WheelEvent
  * @see http://www.w3.org/TR/DOM-Level-3-Events/
  */
+//  同步的滚轮事件
 var SyntheticWheelEvent = SyntheticMouseEvent.extend({
   deltaX: function (event) {
+    //  webkit和标准化内核使用的是wheelDeltaX，向右是正
     return 'deltaX' in event ? event.deltaX : // Fallback to `wheelDeltaX` for Webkit and normalize (right is positive).
     'wheelDeltaX' in event ? -event.wheelDeltaX : 0;
   },
   deltaY: function (event) {
+    //  针对webkit和标准化内核返回wheelDeltaY，（向下是正）
+    //  针对小于IE9的IE浏览器，返回wheelDelta
     return 'deltaY' in event ? event.deltaY : // Fallback to `wheelDeltaY` for Webkit and normalize (down is positive).
     'wheelDeltaY' in event ? -event.wheelDeltaY : // Fallback to `wheelDelta` for IE<9 and normalize (down is positive).
     'wheelDelta' in event ? -event.wheelDelta : 0;
   },
 
   deltaZ: null,
+
+  //  没有deltaMode的浏览器是通过原始的滚轮偏移量上报,一个刻度的滚动大致是+/-像素
+  //  一个合理的近似是DOM_DELTA_LINE是5%的视口尺寸或者40像素，DOM_DELTA_SCREEN
+  //  大致是87.5%的视口尺寸
 
   // Browsers without "deltaMode" is reporting in raw wheel delta where one
   // notch on the scroll is always +/- 120, roughly equivalent to pixels.
@@ -5829,12 +5874,16 @@ var SyntheticWheelEvent = SyntheticMouseEvent.extend({
  * ]);
  */
 
+ // 可交互事件类型的名字
 var interactiveEventTypeNames = [[TOP_BLUR, 'blur'], [TOP_CANCEL, 'cancel'], [TOP_CLICK, 'click'], [TOP_CLOSE, 'close'], [TOP_CONTEXT_MENU, 'contextMenu'], [TOP_COPY, 'copy'], [TOP_CUT, 'cut'], [TOP_AUX_CLICK, 'auxClick'], [TOP_DOUBLE_CLICK, 'doubleClick'], [TOP_DRAG_END, 'dragEnd'], [TOP_DRAG_START, 'dragStart'], [TOP_DROP, 'drop'], [TOP_FOCUS, 'focus'], [TOP_INPUT, 'input'], [TOP_INVALID, 'invalid'], [TOP_KEY_DOWN, 'keyDown'], [TOP_KEY_PRESS, 'keyPress'], [TOP_KEY_UP, 'keyUp'], [TOP_MOUSE_DOWN, 'mouseDown'], [TOP_MOUSE_UP, 'mouseUp'], [TOP_PASTE, 'paste'], [TOP_PAUSE, 'pause'], [TOP_PLAY, 'play'], [TOP_POINTER_CANCEL, 'pointerCancel'], [TOP_POINTER_DOWN, 'pointerDown'], [TOP_POINTER_UP, 'pointerUp'], [TOP_RATE_CHANGE, 'rateChange'], [TOP_RESET, 'reset'], [TOP_SEEKED, 'seeked'], [TOP_SUBMIT, 'submit'], [TOP_TOUCH_CANCEL, 'touchCancel'], [TOP_TOUCH_END, 'touchEnd'], [TOP_TOUCH_START, 'touchStart'], [TOP_VOLUME_CHANGE, 'volumeChange']];
+//  不可交互的事件类型名字
 var nonInteractiveEventTypeNames = [[TOP_ABORT, 'abort'], [TOP_ANIMATION_END, 'animationEnd'], [TOP_ANIMATION_ITERATION, 'animationIteration'], [TOP_ANIMATION_START, 'animationStart'], [TOP_CAN_PLAY, 'canPlay'], [TOP_CAN_PLAY_THROUGH, 'canPlayThrough'], [TOP_DRAG, 'drag'], [TOP_DRAG_ENTER, 'dragEnter'], [TOP_DRAG_EXIT, 'dragExit'], [TOP_DRAG_LEAVE, 'dragLeave'], [TOP_DRAG_OVER, 'dragOver'], [TOP_DURATION_CHANGE, 'durationChange'], [TOP_EMPTIED, 'emptied'], [TOP_ENCRYPTED, 'encrypted'], [TOP_ENDED, 'ended'], [TOP_ERROR, 'error'], [TOP_GOT_POINTER_CAPTURE, 'gotPointerCapture'], [TOP_LOAD, 'load'], [TOP_LOADED_DATA, 'loadedData'], [TOP_LOADED_METADATA, 'loadedMetadata'], [TOP_LOAD_START, 'loadStart'], [TOP_LOST_POINTER_CAPTURE, 'lostPointerCapture'], [TOP_MOUSE_MOVE, 'mouseMove'], [TOP_MOUSE_OUT, 'mouseOut'], [TOP_MOUSE_OVER, 'mouseOver'], [TOP_PLAYING, 'playing'], [TOP_POINTER_MOVE, 'pointerMove'], [TOP_POINTER_OUT, 'pointerOut'], [TOP_POINTER_OVER, 'pointerOver'], [TOP_PROGRESS, 'progress'], [TOP_SCROLL, 'scroll'], [TOP_SEEKING, 'seeking'], [TOP_STALLED, 'stalled'], [TOP_SUSPEND, 'suspend'], [TOP_TIME_UPDATE, 'timeUpdate'], [TOP_TOGGLE, 'toggle'], [TOP_TOUCH_MOVE, 'touchMove'], [TOP_TRANSITION_END, 'transitionEnd'], [TOP_WAITING, 'waiting'], [TOP_WHEEL, 'wheel']];
 
 var eventTypes$4 = {};
+//  顶层事件到分发配置的映射
 var topLevelEventsToDispatchConfig = {};
 
+//  给配置中添加事件类型名
 function addEventTypeNameToConfig(_ref, isInteractive) {
   var topEvent = _ref[0],
       event = _ref[1];
