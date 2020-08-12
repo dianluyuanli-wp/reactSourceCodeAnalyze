@@ -5887,8 +5887,9 @@ var topLevelEventsToDispatchConfig = {};
 function addEventTypeNameToConfig(_ref, isInteractive) {
   var topEvent = _ref[0],
       event = _ref[1];
-
+  //  大写的名字
   var capitalizedEvent = event[0].toUpperCase() + event.slice(1);
+  //  带on的名字
   var onEvent = 'on' + capitalizedEvent;
 
   var type = {
@@ -5899,37 +5900,51 @@ function addEventTypeNameToConfig(_ref, isInteractive) {
     dependencies: [topEvent],
     isInteractive: isInteractive
   };
+  //  注入映射
   eventTypes$4[event] = type;
+  //  顶层事件和分发配置的映射
   topLevelEventsToDispatchConfig[topEvent] = type;
 }
 
+//  可交互事件的事件名标记为true
 interactiveEventTypeNames.forEach(function (eventTuple) {
   addEventTypeNameToConfig(eventTuple, true);
 });
+//  不可交互事件的事件名标记为false
 nonInteractiveEventTypeNames.forEach(function (eventTuple) {
   addEventTypeNameToConfig(eventTuple, false);
 });
 
+//  仅在开发环境用于穷举验证
+//  已知的Html顶层类型名
+
 // Only used in DEV for exhaustiveness validation.
 var knownHTMLTopLevelTypes = [TOP_ABORT, TOP_CANCEL, TOP_CAN_PLAY, TOP_CAN_PLAY_THROUGH, TOP_CLOSE, TOP_DURATION_CHANGE, TOP_EMPTIED, TOP_ENCRYPTED, TOP_ENDED, TOP_ERROR, TOP_INPUT, TOP_INVALID, TOP_LOAD, TOP_LOADED_DATA, TOP_LOADED_METADATA, TOP_LOAD_START, TOP_PAUSE, TOP_PLAY, TOP_PLAYING, TOP_PROGRESS, TOP_RATE_CHANGE, TOP_RESET, TOP_SEEKED, TOP_SEEKING, TOP_STALLED, TOP_SUBMIT, TOP_SUSPEND, TOP_TIME_UPDATE, TOP_TOGGLE, TOP_VOLUME_CHANGE, TOP_WAITING];
 
+//  简单事件插件
 var SimpleEventPlugin = {
   eventTypes: eventTypes$4,
 
+  //  是否是可交互的顶层事件
   isInteractiveTopLevelEventType: function (topLevelType) {
     var config = topLevelEventsToDispatchConfig[topLevelType];
     return config !== undefined && config.isInteractive === true;
   },
 
-
+  //  提取事件
   extractEvents: function (topLevelType, targetInst, nativeEvent, nativeEventTarget) {
+    //  读取分发的配置
     var dispatchConfig = topLevelEventsToDispatchConfig[topLevelType];
     if (!dispatchConfig) {
       return null;
     }
     var EventConstructor = void 0;
+    //  选择合适的事件构造器
     switch (topLevelType) {
       case TOP_KEY_PRESS:
+        //  fireFox给功能键也创造了摁键事件。这里移除了不需要的摁键事件。enter既是
+        //  可打印的也是不可打印的，我们希望tab键也是如此（但事实上不是）
+
         // Firefox creates a keypress event for function keys too. This removes
         // the unwanted keypress events. Enter is however both printable and
         // non-printable. One would expect Tab to be as well (but it isn't).
@@ -5939,13 +5954,16 @@ var SimpleEventPlugin = {
       /* falls through */
       case TOP_KEY_DOWN:
       case TOP_KEY_UP:
+        //  keyDown和up共用一个事件
         EventConstructor = SyntheticKeyboardEvent;
         break;
       case TOP_BLUR:
       case TOP_FOCUS:
+        //  失焦和聚焦共用一个事件
         EventConstructor = SyntheticFocusEvent;
         break;
       case TOP_CLICK:
+        //  fireFox给鼠标右键创建了一个点击事件，这里移除
         // Firefox creates a click event on right mouse clicks. This removes the
         // unwanted click events.
         if (nativeEvent.button === 2) {
@@ -5962,6 +5980,7 @@ var SimpleEventPlugin = {
       case TOP_MOUSE_OUT:
       case TOP_MOUSE_OVER:
       case TOP_CONTEXT_MENU:
+        //  这是鼠标事件共用一个构造器
         EventConstructor = SyntheticMouseEvent;
         break;
       case TOP_DRAG:
@@ -5972,31 +5991,38 @@ var SimpleEventPlugin = {
       case TOP_DRAG_OVER:
       case TOP_DRAG_START:
       case TOP_DROP:
+        //  拖拽合成事件
         EventConstructor = SyntheticDragEvent;
         break;
       case TOP_TOUCH_CANCEL:
       case TOP_TOUCH_END:
       case TOP_TOUCH_MOVE:
       case TOP_TOUCH_START:
+        //  触摸合成事件
         EventConstructor = SyntheticTouchEvent;
         break;
       case TOP_ANIMATION_END:
       case TOP_ANIMATION_ITERATION:
       case TOP_ANIMATION_START:
+        //  动画事件
         EventConstructor = SyntheticAnimationEvent;
         break;
       case TOP_TRANSITION_END:
+        //  过渡事件
         EventConstructor = SyntheticTransitionEvent;
         break;
       case TOP_SCROLL:
+        //  滑动条事件
         EventConstructor = SyntheticUIEvent;
         break;
       case TOP_WHEEL:
+        //  滚轮事件
         EventConstructor = SyntheticWheelEvent;
         break;
       case TOP_COPY:
       case TOP_CUT:
       case TOP_PASTE:
+        //  剪贴板事件
         EventConstructor = SyntheticClipboardEvent;
         break;
       case TOP_GOT_POINTER_CAPTURE:
@@ -6007,31 +6033,42 @@ var SimpleEventPlugin = {
       case TOP_POINTER_OUT:
       case TOP_POINTER_OVER:
       case TOP_POINTER_UP:
+        //  指针事件
         EventConstructor = SyntheticPointerEvent;
         break;
       default:
         {
+          //  如果都没有找到，警告
           if (knownHTMLTopLevelTypes.indexOf(topLevelType) === -1) {
+            //  简单事件插件：无法处理的事件类型，可能由react内部的bug触发，请提issue
             warningWithoutStack$1(false, 'SimpleEventPlugin: Unhandled event type, `%s`. This warning ' + 'is likely caused by a bug in React. Please file an issue.', topLevelType);
           }
         }
         // HTML Events
         // @see http://www.w3.org/TR/html5/index.html#events-0
+        //  默认的合成事件
         EventConstructor = SyntheticEvent;
         break;
     }
+    //  从时间池子中取出一个事件
     var event = EventConstructor.getPooled(dispatchConfig, targetInst, nativeEvent, nativeEventTarget);
+    //  整合冒泡和捕获事件
     accumulateTwoPhaseDispatches(event);
     return event;
   }
 };
 
+//  是可交互的顶层事件类型
 var isInteractiveTopLevelEventType = SimpleEventPlugin.isInteractiveTopLevelEventType;
 
 
+//  回调记录池子的大小
 var CALLBACK_BOOKKEEPING_POOL_SIZE = 10;
+//  回调记录池
 var callbackBookkeepingPool = [];
 
+//  找到最深的包含传入实例的根组件的react组件（当整个react数都互相嵌套的时候使用），
+//  如果react树没有嵌套，返回null
 /**
  * Find the deepest React component completely containing the root of the
  * passed-in instance (for use when entire React trees are nested within each
