@@ -1095,6 +1095,7 @@ function extractEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget)
       }
     }
   }
+  //  这是一个事件组成的数组
   return events;
 }
 
@@ -1128,6 +1129,7 @@ function runEventsInBatch(events) {
 }
 //  一次跑提取出来的多个事件
 function runExtractedEventsInBatch(topLevelType, targetInst, nativeEvent, nativeEventTarget) {
+  //  一个事件数组
   var events = extractEvents(topLevelType, targetInst, nativeEvent, nativeEventTarget);
   runEventsInBatch(events);
 }
@@ -6075,21 +6077,28 @@ var callbackBookkeepingPool = [];
  * other). If React trees are not nested, returns null.
  */
 function findRootContainerNode(inst) {
+  //TODO: 缓存这里的内容以免不必要的DOM遍历，但是不使用突变监听器来监听所有DOM
+  //  的变化来实现这个功能十分复杂。
+
   // TODO: It may be a good idea to cache this to prevent unnecessary DOM
   // traversal, but caching is difficult to do correctly without using a
   // mutation observer to listen for all DOM changes.
   while (inst.return) {
     inst = inst.return;
   }
+  //  如果已经被废了的DOM，返回null
   if (inst.tag !== HostRoot) {
     // This can happen if we're in a detached tree.
     return null;
   }
+  //  返回最上层节点的containerInfo
   return inst.stateNode.containerInfo;
 }
 
+//  用来储存祖先元素在顶层回调中的层级
 // Used to store ancestor hierarchy in top level callback
 function getTopLevelCallbackBookKeeping(topLevelType, nativeEvent, targetInst) {
+  //  池子里如果原来有，就取一个，重新赋值后返回
   if (callbackBookkeepingPool.length) {
     var instance = callbackBookkeepingPool.pop();
     instance.topLevelType = topLevelType;
@@ -6105,6 +6114,7 @@ function getTopLevelCallbackBookKeeping(topLevelType, nativeEvent, targetInst) {
   };
 }
 
+//  释放顶级回调记录
 function releaseTopLevelCallbackBookKeeping(instance) {
   instance.topLevelType = null;
   instance.nativeEvent = null;
@@ -6115,9 +6125,13 @@ function releaseTopLevelCallbackBookKeeping(instance) {
   }
 }
 
+//  控制顶层事件
 function handleTopLevel(bookKeeping) {
+  //  获取实例
   var targetInst = bookKeeping.targetInst;
 
+  //  在有组件嵌套时循环整个层级，在调用任何事件句柄前构造一个组件节点的数组
+  //  是很重要的。因为事件句柄能够改变DOM,导致了react已挂载节点缓存的矛盾
   // Loop through the hierarchy, in case there's any nested components.
   // It's important that we build the array of ancestors before calling any
   // event handlers, because event handlers can modify the DOM, leading to
@@ -6125,23 +6139,30 @@ function handleTopLevel(bookKeeping) {
   var ancestor = targetInst;
   do {
     if (!ancestor) {
+      //  如果没有祖先，注入一个空
       bookKeeping.ancestors.push(ancestor);
       break;
     }
+    //  如果跟组件不存在，退出
     var root = findRootContainerNode(ancestor);
     if (!root) {
       break;
     }
+    //  将祖先推入
     bookKeeping.ancestors.push(ancestor);
+    //  向上溯
     ancestor = getClosestInstanceFromNode(root);
   } while (ancestor);
 
+  //  把之前存进去的祖先一个一个取出来
   for (var i = 0; i < bookKeeping.ancestors.length; i++) {
     targetInst = bookKeeping.ancestors[i];
+    //  每个祖先都调用提取出来的事件的回调
     runExtractedEventsInBatch(bookKeeping.topLevelType, targetInst, bookKeeping.nativeEvent, getEventTarget(bookKeeping.nativeEvent));
   }
 }
 
+//  控制标志位
 // TODO: can we stop exporting these?
 var _enabled = true;
 
@@ -6153,6 +6174,7 @@ function isEnabled() {
   return _enabled;
 }
 
+//  通过事件冒泡捕获顶层事件
 /**
  * Traps top-level events by using event bubbling.
  *
@@ -6188,12 +6210,15 @@ function trapCapturedEvent(topLevelType, element) {
   }
   var dispatch = isInteractiveTopLevelEventType(topLevelType) ? dispatchInteractiveEvent : dispatchEvent;
 
+  //  给元素添加监听器
   addEventCaptureListener(element, getRawEventName(topLevelType),
   // Check if interactive and wrap in interactiveUpdates
   dispatch.bind(null, topLevelType));
 }
 
+//  处理交互事件
 function dispatchInteractiveEvent(topLevelType, nativeEvent) {
+  //  交互更新
   interactiveUpdates(dispatchEvent, topLevelType, nativeEvent);
 }
 
@@ -6202,9 +6227,14 @@ function dispatchEvent(topLevelType, nativeEvent) {
     return;
   }
 
+  //  获取原生事件目标
   var nativeEventTarget = getEventTarget(nativeEvent);
+  //  获取其实例
   var targetInst = getClosestInstanceFromNode(nativeEventTarget);
   if (targetInst !== null && typeof targetInst.tag === 'number' && !isFiberMounted(targetInst)) {
+    //  如果我们在组件装载的提交之前获得了一个事件（比如图片加载），暂时将其忽略（把它看做没有挂载在react树上）
+    //  我们将会在组件挂载之后再次入队和分发事件
+
     // If we get an event (ex: img onload) before committing that
     // component's mount, ignore it for now (that is, treat it as if it was an
     // event on a non-React tree). We might also consider queueing events and
