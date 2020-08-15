@@ -6189,12 +6189,14 @@ function trapBubbledEvent(topLevelType, element) {
     return null;
   }
   var dispatch = isInteractiveTopLevelEventType(topLevelType) ? dispatchInteractiveEvent : dispatchEvent;
-
+  //  添加绑定
   addEventBubbleListener(element, getRawEventName(topLevelType),
+  //  检查是否可交互以及是否包裹在可交互的更新中
   // Check if interactive and wrap in interactiveUpdates
   dispatch.bind(null, topLevelType));
 }
 
+//  拦截顶层事件，赶紧添加监听器
 /**
  * Traps a top-level event by using event capturing.
  *
@@ -6242,17 +6244,35 @@ function dispatchEvent(topLevelType, nativeEvent) {
     targetInst = null;
   }
 
+  //  获得一个顶层回调的记录
   var bookKeeping = getTopLevelCallbackBookKeeping(topLevelType, nativeEvent, targetInst);
 
   try {
+    //  事件队列在同一个循环中被处理，允许preventDefault
     // Event queue being processed in the same cycle allows
     // `preventDefault`.
+
+    //  批量更新
     batchedUpdates(handleTopLevel, bookKeeping);
   } finally {
+    //  释放一个顶层回调记录
     releaseTopLevelCallbackBookKeeping(bookKeeping);
   }
 }
 
+// 在这里总结下react浏览器合成事件触发器的处理过程
+//  顶层事件集合用来捕获绝大多数的浏览器原生事件。这些操作只会出现在主线程中，
+//  由ReactDOMEventListener来负责。这个监听器是被注入的因而支持插件化的事件源，
+//  这也是在主线程中唯一会进行的操作
+
+//  我们将事件标准化和解耦，以便应对一些奇怪的浏览器特性。这些将在工作线程中进行处理
+
+//  将原生事件推向事件插件总线（通过顶层type来捕获这些事件），反过来会询问这些插件
+//  是否要提取任何的合成事件
+
+//  事件插件总线将会通过dispatches来处理每个事件，一系列的监听器和id将会会关注这些事件
+
+//  事件插件总线将会触发这些事件
 /**
  * Summary of `ReactBrowserEventEmitter` event handling:
  *
@@ -6309,24 +6329,39 @@ function dispatchEvent(topLevelType, nativeEvent) {
  *    React Core     .  General Purpose Event Plugin System
  */
 
+ // 已经监听的映射对象
 var alreadyListeningTo = {};
+//  react顶层监听器计数
 var reactTopListenersCounter = 0;
 
+//  为了避免其他潜在的react实例在同一页面间的冲突
 /**
  * To ensure no conflicts with other potential React instances on the page
  */
 var topListenersIDKey = '_reactListenersID' + ('' + Math.random()).slice(2);
 
+//  获取document的监听
 function getListeningForDocument(mountAt) {
+  //  在IE8中，mountAt是一个host对象，并没有hasOwnProperty方法
   // In IE8, `mountAt` is a host object and doesn't have `hasOwnProperty`
   // directly.
   if (!Object.prototype.hasOwnProperty.call(mountAt, topListenersIDKey)) {
+    //  mountAt以react监听id为key，存储一个数字作为标记
     mountAt[topListenersIDKey] = reactTopListenersCounter++;
+    //  以这个数字为key，初始化一个空对象
     alreadyListeningTo[mountAt[topListenersIDKey]] = {};
   }
   return alreadyListeningTo[mountAt[topListenersIDKey]];
 }
 
+//  我们监听在document对象上的冒泡touch事件
+//  firefox 8.01(其他版本可能也有问题)挂载onmousemove事件在某些不是document元素的节点上时，
+//  可能会表现出奇怪的行为。具体表现是如果你的鼠标没有移动到包含挂载点(例如背景)的时候，
+//  顶层的onmousemove事件将不会被触发。如果你将onmousemove事件注册在document对象上，就可以
+//  正确触发。这有肯能是ios的问题，这里调整让顶层事件监听器只能监听document对象，至少是对这类
+//  移动事件类型，以及其他的可能事件
+
+//  类似的，keyup,keypress,kewdown在IE浏览器上并不会冒泡到window，而是冒泡到document
 /**
  * We listen for bubbled touch events on the document object.
  *
@@ -6348,21 +6383,27 @@ function getListeningForDocument(mountAt) {
  * @param {string} registrationName Name of listener (e.g. `onClick`).
  * @param {object} mountAt Container where to mount the listener
  */
+//  监听
 function listenTo(registrationName, mountAt) {
+  //  获取正在监听的这个对象，key是事件名，value是bool,标记事件是否监听
   var isListening = getListeningForDocument(mountAt);
+  //  获取依赖（其实是登记名和事件名的映射）
   var dependencies = registrationNameDependencies[registrationName];
 
   for (var i = 0; i < dependencies.length; i++) {
+    //  dependency其实是一个字符串
     var dependency = dependencies[i];
     if (!(isListening.hasOwnProperty(dependency) && isListening[dependency])) {
       switch (dependency) {
         case TOP_SCROLL:
+          //  拦截冒泡事件
           trapCapturedEvent(TOP_SCROLL, mountAt);
           break;
         case TOP_FOCUS:
         case TOP_BLUR:
           trapCapturedEvent(TOP_FOCUS, mountAt);
           trapCapturedEvent(TOP_BLUR, mountAt);
+          //  我们在后续的函数中会设置单独的标志位，但是在这里我们确保两中时间都设置了
           // We set the flag for a single dependency later in this function,
           // but this ensures we mark both as attached rather than just one.
           isListening[TOP_BLUR] = true;
@@ -6377,10 +6418,13 @@ function listenTo(registrationName, mountAt) {
         case TOP_INVALID:
         case TOP_SUBMIT:
         case TOP_RESET:
+          //  这些事件我们在目标DOM上监听，有些时间会冒泡，这里不做处理
           // We listen to them on the target DOM elements.
           // Some of them bubble so we don't want them to fire twice.
           break;
         default:
+          //  默认情况下，监听所有非媒体事件的顶层事件类型，媒体事件不会冒泡，
+          //  哪怕加了监听器也于事无补
           // By default, listen on the top level to all non-media events.
           // Media events don't bubble so adding the listener wouldn't do anything.
           var isMediaEvent = mediaEventTypes.indexOf(dependency) !== -1;
@@ -6394,7 +6438,9 @@ function listenTo(registrationName, mountAt) {
   }
 }
 
+//  是否监听了所有依赖的事件类型
 function isListeningToAllDependencies(registrationName, mountAt) {
+  //  记录监听状态的obj
   var isListening = getListeningForDocument(mountAt);
   var dependencies = registrationNameDependencies[registrationName];
   for (var i = 0; i < dependencies.length; i++) {
@@ -6406,6 +6452,7 @@ function isListeningToAllDependencies(registrationName, mountAt) {
   return true;
 }
 
+//  获取激活的元素
 function getActiveElement(doc) {
   doc = doc || (typeof document !== 'undefined' ? document : undefined);
   if (typeof doc === 'undefined') {
@@ -6414,10 +6461,12 @@ function getActiveElement(doc) {
   try {
     return doc.activeElement || doc.body;
   } catch (e) {
+    //  默认返回body
     return doc.body;
   }
 }
 
+//  传入一个节点，返回其第一个没有子元素的叶子节点
 /**
  * Given any node return the first leaf node without children.
  *
@@ -6431,6 +6480,7 @@ function getLeafNode(node) {
   return node;
 }
 
+//  获取下一个具有容器的兄弟节点，将会遍历DOM,如果兄弟节点已经被耗尽
 /**
  * Get the next sibling within a container. This will walk up the
  * DOM if a node's siblings have been exhausted.
@@ -6447,6 +6497,9 @@ function getSiblingNode(node) {
   }
 }
 
+//  获取描述包含偏移量字符的节点的对象
+//  这个功能是找到选中的文字做在的节点以及偏移的位置，offet为初始或结束位置
+//  文案节点必然是底层节点
 /**
  * Get object describing the nodes which contain characters at offset.
  *
@@ -6472,21 +6525,25 @@ function getNodeForCharacterOffset(root, offset) {
 
       nodeStart = nodeEnd;
     }
-
+    //  找到下一个兄弟节点的最底层节点
     node = getLeafNode(getSiblingNode(node));
   }
 }
 
+//  获取偏移量
 /**
  * @param {DOMElement} outerNode
  * @return {?object}
  */
 function getOffsets(outerNode) {
+  //  获取document
   var ownerDocument = outerNode.ownerDocument;
 
+  //  获取window
   var win = ownerDocument && ownerDocument.defaultView || window;
+  //  获取选中的内容
   var selection = win.getSelection && win.getSelection();
-
+  //  如果没有返回null
   if (!selection || selection.rangeCount === 0) {
     return null;
   }
