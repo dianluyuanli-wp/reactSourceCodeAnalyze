@@ -6548,10 +6548,15 @@ function getOffsets(outerNode) {
     return null;
   }
 
+  //  依次定义光标节点，光标偏移，焦点节点和焦点偏移
   var anchorNode = selection.anchorNode,
       anchorOffset = selection.anchorOffset,
       focusNode = selection.focusNode,
       focusOffset = selection.focusOffset;
+
+  //  在firefox中，光标节点和聚焦节点可以为匿名节点，例如上下键在imput标签中，匿名
+  //  div并不会暴露属性，触发一个权限禁止错误如果其中的任意属性被获取的。唯一可能
+  //  的解决方法是只获取非匿名div上的属性，并且捕获其他上报的错误。
 
   // In Firefox, anchorNode and focusNode can be "anonymous divs", e.g. the
   // up/down buttons on an <input type="number">. Anonymous divs do not seem to
@@ -6561,6 +6566,7 @@ function getOffsets(outerNode) {
   // catch any error that may otherwise arise. See
   // https://bugzilla.mozilla.org/show_bug.cgi?id=208427
 
+  //  如果没有节点属性，返回null
   try {
     /* eslint-disable no-unused-expressions */
     anchorNode.nodeType;
@@ -6570,9 +6576,14 @@ function getOffsets(outerNode) {
     return null;
   }
 
+  //  获取现代节点的偏移量
   return getModernOffsetsFromPoints(outerNode, anchorNode, anchorOffset, focusNode, focusOffset);
 }
 
+//  返回一个对象{start, end},start表示字符或者代码点在(光标节点，光标偏移)在外部节点文字内容中的顺序
+//  end表示的是在（焦点，焦点偏移）之间的顺位
+//  在你传入垃圾的时候返回null，否则的话react可能会崩溃
+//  仅仅为了测试而暴露出来
 /**
  * Returns {start, end} where `start` is the character/codepoint index of
  * (anchorNode, anchorOffset) within the textContent of `outerNode`, and
@@ -6582,6 +6593,9 @@ function getOffsets(outerNode) {
  *
  * Exported only for testing.
  */
+//  相関概念 https://www.jianshu.com/p/88be93bb277d
+//  anchor表示选区起点，focus表示选区终点，anchorNode表示anchor所在的节点
+//  anchorOffset表示anchor在anchorNode中的偏移量，focusOffset类似
 function getModernOffsetsFromPoints(outerNode, anchorNode, anchorOffset, focusNode, focusOffset) {
   var length = 0;
   var start = -1;
@@ -6605,17 +6619,23 @@ function getModernOffsetsFromPoints(outerNode, anchorNode, anchorOffset, focusNo
       if (node.nodeType === TEXT_NODE) {
         length += node.nodeValue.length;
       }
-
+      //  将node赋值为node的第一个子元素
       if ((next = node.firstChild) === null) {
         break;
       }
+      //  把node移动到其第一个子节点next，深度优先遍历
       // Moving from `node` to its first child `next`.
       parentNode = node;
       node = next;
     }
 
     while (true) {
+      //  如果上面的操作没有移位，或者上溯回去了，外围的while可以破掉了
       if (node === outerNode) {
+        //  如果outerNode有子元素，那么这必然是第二次遍历到它了。如果没有子元素，那么这就是第一轮
+        //  循环，并且唯一可用的选中区域是开始和结尾都等于这个节点并且二者的偏移量都是0，这样
+        //  的情况上面已经处理过
+
         // If `outerNode` has children, this is always the second time visiting
         // it. If it has no children, this is still the first loop, and the only
         // valid selection is anchorNode and focusNode both equal to this node
@@ -6631,26 +6651,30 @@ function getModernOffsetsFromPoints(outerNode, anchorNode, anchorOffset, focusNo
       if ((next = node.nextSibling) !== null) {
         break;
       }
+      //  有兄弟节点了就回溯
       node = parentNode;
       parentNode = node.parentNode;
     }
-
+    //  将node移动到下一个兄弟节点的next处
     // Moving from `node` to its next sibling `next`.
     node = next;
   }
 
   if (start === -1 || end === -1) {
+    //  理论上这种情况不会发生，除非anchor或者focus并不在传入节点的节点树中
     // This should never happen. (Would happen if the anchor/focus nodes aren't
     // actually inside the passed-in node.)
     return null;
   }
 
+  //  返回对象
   return {
     start: start,
     end: end
   };
 }
 
+//  在现代的非ie浏览器中，我们可以支持前向和后向选择
 /**
  * In modern non-IE browsers, we can support both forward and backward
  * selections.
