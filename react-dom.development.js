@@ -6452,7 +6452,7 @@ function isListeningToAllDependencies(registrationName, mountAt) {
   return true;
 }
 
-//  获取激活的元素
+//  获取激活的元素(获得焦点的元素)
 function getActiveElement(doc) {
   doc = doc || (typeof document !== 'undefined' ? document : undefined);
   if (typeof doc === 'undefined') {
@@ -6519,6 +6519,7 @@ function getNodeForCharacterOffset(root, offset) {
       if (nodeStart <= offset && nodeEnd >= offset) {
         return {
           node: node,
+          //  真实的长度偏移量
           offset: offset - nodeStart
         };
       }
@@ -6594,28 +6595,33 @@ function getOffsets(outerNode) {
  * Exported only for testing.
  */
 //  相関概念 https://www.jianshu.com/p/88be93bb277d
-//  anchor表示选区起点，focus表示选区终点，anchorNode表示anchor所在的节点
+//  anchor表示选区起点，focus表示选区终点，anchorNode表示anchor所在的节点（父节点）
 //  anchorOffset表示anchor在anchorNode中的偏移量，focusOffset类似
 function getModernOffsetsFromPoints(outerNode, anchorNode, anchorOffset, focusNode, focusOffset) {
   var length = 0;
   var start = -1;
   var end = -1;
+  //  记录anchorNode内遍历的次数，判断是否找到了anchor
   var indexWithinAnchor = 0;
+  //  foucus同理
   var indexWithinFocus = 0;
   var node = outerNode;
   var parentNode = null;
 
   outer: while (true) {
     var next = null;
-
+    //  这里其实嵌套了三层，outerNode里面是anchorNode，anchorNode内部有anchor
     while (true) {
+      //  如果已经找到了anchorNode节点，并且该节点内部没有偏移或者是文字节点
+      //  那么开始就是之前的偏移和节点内的偏移
       if (node === anchorNode && (anchorOffset === 0 || node.nodeType === TEXT_NODE)) {
         start = length + anchorOffset;
       }
+      //  结束的节点同理
       if (node === focusNode && (focusOffset === 0 || node.nodeType === TEXT_NODE)) {
         end = length + focusOffset;
       }
-
+      //  如果遇上文字节点，直接添加长度偏移量
       if (node.nodeType === TEXT_NODE) {
         length += node.nodeValue.length;
       }
@@ -6642,9 +6648,11 @@ function getModernOffsetsFromPoints(outerNode, anchorNode, anchorOffset, focusNo
         // and both offsets 0, in which case we will have handled above.
         break outer;
       }
+      //  如果父节点是anchorNode，并且偏移量对的上，表示已经找到了，给start赋值
       if (parentNode === anchorNode && ++indexWithinAnchor === anchorOffset) {
         start = length;
       }
+      //  focus同理
       if (parentNode === focusNode && ++indexWithinFocus === focusOffset) {
         end = length;
       }
@@ -6675,6 +6683,8 @@ function getModernOffsetsFromPoints(outerNode, anchorNode, anchorOffset, focusNo
 }
 
 //  在现代的非ie浏览器中，我们可以支持前向和后向选择
+//  IE10+支持区域选择，但是不支持extend方法，这就意味着即使在ie内，也是不支持
+//  通过代码来创建后向选取。因此，针对所有的IE版本，我们使用老的ie Api来创建选区
 /**
  * In modern non-IE browsers, we can support both forward and backward
  * selections.
@@ -6687,9 +6697,14 @@ function getModernOffsetsFromPoints(outerNode, anchorNode, anchorOffset, focusNo
  * @param {DOMElement|DOMTextNode} node
  * @param {object} offsets
  */
+//  设置偏移量
 function setOffsets(node, offsets) {
   var doc = node.ownerDocument || document;
   var win = doc && doc.defaultView || window;
+
+  //  Edge在一些场景下不支持Object expected.
+  //  例如： TinyMCE编辑器使用了一个组件列表来支持添加更多的组件，
+  //  但是数量超过100的时候会报错
 
   // Edge fails with "Object expected" in some scenarios.
   // (For instance: TinyMCE editor used in a list component that supports pasting to add more,
@@ -6703,9 +6718,13 @@ function setOffsets(node, offsets) {
   var start = Math.min(offsets.start, length);
   var end = offsets.end === undefined ? start : Math.min(offsets.end, length);
 
+  //  IE 11 使用现代的选择，但是不支持扩展方法。
+  //  这里我们反向选择，我们只设置一个范围
+
   // IE 11 uses modern selection, but doesn't support the extend method.
   // Flip backward selections, so we can set with a single range.
   if (!selection.extend && start > end) {
+    //  如果不存在extend方法并且start大于end,直接调换位置
     var temp = end;
     end = start;
     start = temp;
@@ -6721,7 +6740,7 @@ function setOffsets(node, offsets) {
     var range = doc.createRange();
     range.setStart(startMarker.node, startMarker.offset);
     selection.removeAllRanges();
-
+    //  关于extend方法: https://developer.mozilla.org/zh-CN/docs/Web/API/Selection/extend
     if (start > end) {
       selection.addRange(range);
       selection.extend(endMarker.node, endMarker.offset);
@@ -6732,10 +6751,12 @@ function setOffsets(node, offsets) {
   }
 }
 
+//  是否是文字节点
 function isTextNode(node) {
   return node && node.nodeType === TEXT_NODE;
 }
 
+//  外层节点是否包含里层节点
 function containsNode(outerNode, innerNode) {
   if (!outerNode || !innerNode) {
     return false;
@@ -6747,6 +6768,8 @@ function containsNode(outerNode, innerNode) {
     return containsNode(outerNode, innerNode.parentNode);
   } else if ('contains' in outerNode) {
     return outerNode.contains(innerNode);
+  //  https://www.runoob.com/jsref/met-node-comparedocumentposition.html
+  //  compareDocumentPosition返回一个数字，跟16按位与
   } else if (outerNode.compareDocumentPosition) {
     return !!(outerNode.compareDocumentPosition(innerNode) & 16);
   } else {
@@ -6754,12 +6777,18 @@ function containsNode(outerNode, innerNode) {
   }
 }
 
+//  是否在document中
 function isInDocument(node) {
   return node && node.ownerDocument && containsNode(node.ownerDocument.documentElement, node);
 }
 
+//  是否是同源iframe
 function isSameOriginFrame(iframe) {
   try {
+    //  获取HTMLIframe元素的内容document会导致浏览器抛错，如果含有跨域的src属性
+    //  safari将会在触发跨域错误的时候在控制台中输出一个error,例如iframe.contentDocument.defaultView
+
+    //  获取跨域源属性的安全的方法是：访问window或者location将会触发安全错误的DOM抛错，兼容safari
     // Accessing the contentDocument of a HTMLIframeElement can cause the browser
     // to throw, e.g. if it has a cross-origin src attribute.
     // Safari will show an error in the console when the access results in "Blocked a frame with origin". e.g:
@@ -6774,9 +6803,11 @@ function isSameOriginFrame(iframe) {
   }
 }
 
+//  获取激活的元素
 function getActiveElementDeep() {
   var win = window;
   var element = getActiveElement();
+  //  如果是iframe，继续往下找
   while (element instanceof win.HTMLIFrameElement) {
     if (isSameOriginFrame(element)) {
       win = element.contentWindow;
@@ -6788,6 +6819,8 @@ function getActiveElementDeep() {
   return element;
 }
 
+//  react输入选择：react的输入选择模块。依据selection.js，但是做了很多修改以便适配
+//  同时做了bug修复，（button不支持范围选择）。react适用的输入选择模块
 /**
  * @ReactInputSelection: React input selection module. Based on Selection.js,
  * but modified to be suitable for react and has a couple of bug fixes (doesn't
@@ -6795,6 +6828,7 @@ function getActiveElementDeep() {
  * Input selection module for React.
  */
 
+// 选择区块兼容性：我们获取支持区域选择的元素类型，在网址下查看selectionstart和selectionEnd两行
 /**
  * @hasSelectionCapabilities: we get the element types that support selection
  * from https://html.spec.whatwg.org/#do-not-apply, looking at `selectionStart`
