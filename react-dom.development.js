@@ -6834,12 +6834,16 @@ function getActiveElementDeep() {
  * from https://html.spec.whatwg.org/#do-not-apply, looking at `selectionStart`
  * and `selectionEnd` rows.
  */
+//  是否有selection兼容性
 function hasSelectionCapabilities(elem) {
   var nodeName = elem && elem.nodeName && elem.nodeName.toLowerCase();
+  //  首先要有node名，如果是input并且类型是某种类型或者是textarea或者是可编辑元素都可以
   return nodeName && (nodeName === 'input' && (elem.type === 'text' || elem.type === 'search' || elem.type === 'tel' || elem.type === 'url' || elem.type === 'password') || nodeName === 'textarea' || elem.contentEditable === 'true');
 }
 
+//  获取选取信息
 function getSelectionInformation() {
+  //  获取当前的焦点组件
   var focusedElem = getActiveElementDeep();
   return {
     focusedElem: focusedElem,
@@ -6847,23 +6851,32 @@ function getSelectionInformation() {
   };
 }
 
+//  再次储存选区：选区的信息可能丢失，这里存下来。这是在进行操作时是有很用的
+//  那么就可以移除node节点，并且把它们放回来，通常这样会导致失焦
 /**
  * @restoreSelection: If any selection information was potentially lost,
  * restore it. This is useful when performing operations that could remove dom
  * nodes and place them back in, resulting in focus being lost.
  */
 function restoreSelection(priorSelectionInformation) {
+  //  当前焦点元素
   var curFocusedElem = getActiveElementDeep();
+  //  之前的焦点元素
   var priorFocusedElem = priorSelectionInformation.focusedElem;
+  //  之前的范围
   var priorSelectionRange = priorSelectionInformation.selectionRange;
+  //  如果之前的焦点和现在的焦点元素不一致
   if (curFocusedElem !== priorFocusedElem && isInDocument(priorFocusedElem)) {
     if (priorSelectionRange !== null && hasSelectionCapabilities(priorFocusedElem)) {
+      //  设置范围
       setSelection(priorFocusedElem, priorSelectionRange);
     }
 
+    //  让某个元素获得焦点可能会导致scroll滚动，这是非预期内的
     // Focusing a node can change the scroll position, which is undesirable
     var ancestors = [];
     var ancestor = priorFocusedElem;
+    //  获取祖先节点列表与他们的scroll位置
     while (ancestor = ancestor.parentNode) {
       if (ancestor.nodeType === ELEMENT_NODE) {
         ancestors.push({
@@ -6873,11 +6886,12 @@ function restoreSelection(priorSelectionInformation) {
         });
       }
     }
-
+    //  执行focus操作
     if (typeof priorFocusedElem.focus === 'function') {
       priorFocusedElem.focus();
     }
 
+    //  还原scroll
     for (var i = 0; i < ancestors.length; i++) {
       var info = ancestors[i];
       info.element.scrollLeft = info.left;
@@ -6886,6 +6900,7 @@ function restoreSelection(priorSelectionInformation) {
   }
 }
 
+//  获取焦点textarea，input或者可编辑节点的selection界限
 /**
  * @getSelection: Gets the selection bounds of a focused textarea, input or
  * contentEditable node.
@@ -6896,12 +6911,14 @@ function getSelection$1(input) {
   var selection = void 0;
 
   if ('selectionStart' in input) {
+    //  现代浏览器的input或者textarea直接读即可
     // Modern browser with input or textarea.
     selection = {
       start: input.selectionStart,
       end: input.selectionEnd
     };
   } else {
+    //  可编辑组件或者老ie浏览器
     // Content editable or old IE textarea.
     selection = getOffsets(input);
   }
@@ -6909,6 +6926,7 @@ function getSelection$1(input) {
   return selection || { start: 0, end: 0 };
 }
 
+//  设置input,textarea的selection，并且让输入获得焦点
 /**
  * @setSelection: Sets the selection bounds of a textarea or input and focuses
  * the input.
@@ -6922,7 +6940,7 @@ function setSelection(input, offsets) {
   if (end === undefined) {
     end = start;
   }
-
+  //  如果存在selectionStart，直接设置
   if ('selectionStart' in input) {
     input.selectionStart = start;
     input.selectionEnd = Math.min(end, input.value.length);
@@ -6931,14 +6949,17 @@ function setSelection(input, offsets) {
   }
 }
 
+//  跳过选择区域改变事件
 var skipSelectionChangeEvent = canUseDOM && 'documentMode' in document && document.documentMode <= 11;
 
 var eventTypes$3 = {
   select: {
+    //  登记名事件
     phasedRegistrationNames: {
       bubbled: 'onSelect',
       captured: 'onSelectCapture'
     },
+    //  以来的顶层事件类型
     dependencies: [TOP_BLUR, TOP_CONTEXT_MENU, TOP_DRAG_END, TOP_FOCUS, TOP_KEY_DOWN, TOP_KEY_UP, TOP_MOUSE_DOWN, TOP_MOUSE_UP, TOP_SELECTION_CHANGE]
   }
 };
@@ -6948,6 +6969,7 @@ var activeElementInst$1 = null;
 var lastSelection = null;
 var mouseDown = false;
 
+//  获取当前选择区块中的特殊表现对象
 /**
  * Get an object which is a unique representation of the current selection.
  *
@@ -6958,6 +6980,7 @@ var mouseDown = false;
  * @return {object}
  */
 function getSelection(node) {
+  //  如果有selectionStart属性并且能够兼容
   if ('selectionStart' in node && hasSelectionCapabilities(node)) {
     return {
       start: node.selectionStart,
@@ -6966,6 +6989,7 @@ function getSelection(node) {
   } else {
     var win = node.ownerDocument && node.ownerDocument.defaultView || window;
     var selection = win.getSelection();
+    //  否则返回节点及其偏移
     return {
       anchorNode: selection.anchorNode,
       anchorOffset: selection.anchorOffset,
@@ -6975,6 +6999,7 @@ function getSelection(node) {
   }
 }
 
+//  获取带事件目标的document
 /**
  * Get document associated with the event target.
  *
@@ -6985,6 +7010,7 @@ function getEventTargetDocument(eventTarget) {
   return eventTarget.window === eventTarget ? eventTarget.document : eventTarget.nodeType === DOCUMENT_NODE ? eventTarget : eventTarget.ownerDocument;
 }
 
+//  对选区轮询看是否变化
 /**
  * Poll selection to see whether it's changed.
  *
@@ -6992,7 +7018,11 @@ function getEventTargetDocument(eventTarget) {
  * @param {object} nativeEventTarget
  * @return {?SyntheticEvent}
  */
+//  构造select事件
 function constructSelectEvent(nativeEvent, nativeEventTarget) {
+  //  假设我们有正确的元素，并且用户没有在拖拽选区（这跟原生select事件是一致的）
+  //  在html中，select只在input和textarea中触发，因此如果没有焦点元素，我们不会触发事件
+
   // Ensure we have the right element, and that the user is not dragging a
   // selection (this matches native `select` event behavior). In HTML5, select
   // fires only on input and textarea thus if there's no focused element we
@@ -7003,16 +7033,18 @@ function constructSelectEvent(nativeEvent, nativeEventTarget) {
     return null;
   }
 
+  //  只在election真实改变的时候才触发
   // Only fire when selection has actually changed.
   var currentSelection = getSelection(activeElement$1);
+  //  没有最近的选区或者当前和最近选区不相等
   if (!lastSelection || !shallowEqual(lastSelection, currentSelection)) {
+    //  更新最近的选区
     lastSelection = currentSelection;
-
+    //  获取合成事件
     var syntheticEvent = SyntheticEvent.getPooled(eventTypes$3.select, activeElementInst$1, nativeEvent, nativeEventTarget);
-
     syntheticEvent.type = 'select';
     syntheticEvent.target = activeElement$1;
-
+    //  触发绑定的事件
     accumulateTwoPhaseDispatches(syntheticEvent);
 
     return syntheticEvent;
@@ -7021,6 +7053,12 @@ function constructSelectEvent(nativeEvent, nativeEventTarget) {
   return null;
 }
 
+//  这个插件创建一个onSelect事件，该事件标准化所有元素中的select事件
+//  支持的元素有input,textarea,可编辑内容
+//  这跟原生浏览器的实现是有差别的：
+//  在input中和可编辑内容中都会触发
+//  在折叠的selection也会触发
+//  在用户输入之后触发
 /**
  * This plugin creates an `onSelect` event that normalizes select events
  * across form elements.
@@ -7035,9 +7073,10 @@ function constructSelectEvent(nativeEvent, nativeEventTarget) {
  * - Fires for collapsed selection.
  * - Fires after user input.
  */
+//  select事件插件
 var SelectEventPlugin = {
   eventTypes: eventTypes$3,
-
+  //  提取事件
   extractEvents: function (topLevelType, targetInst, nativeEvent, nativeEventTarget) {
     var doc = getEventTargetDocument(nativeEventTarget);
     // Track whether all listeners exists for this plugin. If none exist, we do
@@ -7048,20 +7087,25 @@ var SelectEventPlugin = {
 
     var targetNode = targetInst ? getNodeFromInstance$1(targetInst) : window;
 
+    //  顶层事件类型
     switch (topLevelType) {
+      //  追踪聚焦的输入事件
       // Track the input node that has focus.
       case TOP_FOCUS:
         if (isTextInputElement(targetNode) || targetNode.contentEditable === 'true') {
+          //  绑定事件元素
           activeElement$1 = targetNode;
           activeElementInst$1 = targetInst;
           lastSelection = null;
         }
         break;
+      //  失焦事件
       case TOP_BLUR:
         activeElement$1 = null;
         activeElementInst$1 = null;
         lastSelection = null;
         break;
+      //  尽管用户在拖拽，但是依然不要触发事件，这样跟原生select事件保持一致
       // Don't fire the event while the user is dragging. This matches the
       // semantics of the native select event.
       case TOP_MOUSE_DOWN:
@@ -7071,7 +7115,16 @@ var SelectEventPlugin = {
       case TOP_MOUSE_UP:
       case TOP_DRAG_END:
         mouseDown = false;
+        //  返回构造的select事件
         return constructSelectEvent(nativeEvent, nativeEventTarget);
+      //  chorme和IE在lelection改变的时候触发非标准的事件（有的时候又不是）
+      //  对于删除时的键和输入事件，IE的事件不按顺序触发，所以我们抛弃这个事件
+
+      //  firefox不支持lelectionchange事件，所以在每一个摁键事件发生时检查selection
+      //  的状态。selection改变发生在keydown之后，keyup之前，但是我们也检查keydowns
+      //  事件，针对一直按下一个键的那种事件，这种时候有多个keydown事件但是只触发一个
+      //  keyup事件。这也是我们为了ie做特殊处理的原因，具体如上
+
       // Chrome and IE fire non-standard event when selection is changed (and
       // sometimes when it hasn't). IE's event fires out of order with respect
       // to key and input events on deletion, so we discard it.
@@ -7086,6 +7139,7 @@ var SelectEventPlugin = {
           break;
         }
       // falls through
+      //  keyup和keydown都直接构建事件
       case TOP_KEY_DOWN:
       case TOP_KEY_UP:
         return constructSelectEvent(nativeEvent, nativeEventTarget);
@@ -7095,12 +7149,14 @@ var SelectEventPlugin = {
   }
 };
 
+//  注入模块，为了解析dom的继承关系和插件的顺序
 /**
  * Inject modules for resolving DOM hierarchy and plugin ordering.
  */
 injection.injectEventPluginOrder(DOMEventPluginOrder);
 setComponentTree(getFiberCurrentPropsFromNode$1, getInstanceFromNode$1, getNodeFromInstance$1);
 
+//  部分重要的事件插件（默认引入）
 /**
  * Some important event plugins included by default (without having to require
  * them).
@@ -7116,6 +7172,7 @@ injection.injectEventPluginsByName({
 var didWarnSelectedSetOnOption = false;
 var didWarnInvalidChild = false;
 
+//  打平子元素
 function flattenChildren(children) {
   var content = '';
 
