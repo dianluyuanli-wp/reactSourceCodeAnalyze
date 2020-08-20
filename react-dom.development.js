@@ -7172,9 +7172,11 @@ injection.injectEventPluginsByName({
 var didWarnSelectedSetOnOption = false;
 var didWarnInvalidChild = false;
 
-//  打平子元素
+//  打平子元素，返回拼接成的字符串
 function flattenChildren(children) {
   var content = '';
+  //  打平子元素，在validateProps的过程中我们将会告警，在hydration也是一样
+  //  注意这里会有抛出的非元素对象，元素都将被strigfy(这些通常是无关的，但是关注<fbt>)
 
   // Flatten children. We'll warn if they are invalid
   // during validateProps() which runs for hydration too.
@@ -7186,6 +7188,9 @@ function flattenChildren(children) {
       return;
     }
     content += child;
+    //  注意: 我们不会警告不可用的子元素，相反，这个在后续的逻辑中分开处理
+    //  所以它在混合的代码路径中也会发生
+
     // Note: we don't warn about invalid children here.
     // Instead, this is done separately below so that
     // it happens during the hydration codepath too.
