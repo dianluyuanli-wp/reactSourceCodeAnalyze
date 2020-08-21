@@ -7199,12 +7199,17 @@ function flattenChildren(children) {
   return content;
 }
 
+//  实现一个<option>标签 主组件来警告selected被设置了
 /**
  * Implements an <option> host component that warns when `selected` is set.
  */
 
 function validateProps(element, props) {
   {
+    //  这个反映了上面的代码路径，但是为了配合混合渲染
+    //  在这里警告不可用的子元素，使得客户端和hydration保持一致
+    //  todo: 这个只会在开发环境下抛出错误，如果混合渲染中资源数包含了一个非元素的对象
+    //  我们要避免这种情况
     // This mirrors the codepath above, but runs for hydration too.
     // Warn about invalid children here so that client and hydration are consistent.
     // TODO: this seems like it could cause a DEV-only throw for hydration
@@ -7221,20 +7226,25 @@ function validateProps(element, props) {
           return;
         }
         if (!didWarnInvalidChild) {
+          //  只告警一次
           didWarnInvalidChild = true;
+          //  只有数字和字符串可以是option标签的子元素
           warning$1(false, 'Only strings and numbers are supported as <option> children.');
         }
       });
     }
 
+    //  移除option中的selected
     // TODO: Remove support for `selected` in <option>.
     if (props.selected != null && !didWarnSelectedSetOnOption) {
+      //  使用defaultValue或者value来给option标签设置初始值，而不是使用selected
       warning$1(false, 'Use the `defaultValue` or `value` props on <select> instead of ' + 'setting `selected` on <option>.');
       didWarnSelectedSetOnOption = true;
     }
   }
 }
 
+//  设置value的值
 function postMountWrapper$1(element, props) {
   // value="" should make a value attribute (#6219)
   if (props.value != null) {
@@ -7242,10 +7252,12 @@ function postMountWrapper$1(element, props) {
   }
 }
 
+//  获取主属性
 function getHostProps$1(element, props) {
   var hostProps = _assign({ children: undefined }, props);
   var content = flattenChildren(props.children);
 
+  //  将children设置为字符串
   if (content) {
     hostProps.children = content;
   }
@@ -7253,6 +7265,7 @@ function getHostProps$1(element, props) {
   return hostProps;
 }
 
+//  直接引入不大好
 // TODO: direct imports like some-package/src/* are bad. Fix me.
 var didWarnValueDefaultValue$1 = void 0;
 
@@ -7260,7 +7273,9 @@ var didWarnValueDefaultValue$1 = void 0;
   didWarnValueDefaultValue$1 = false;
 }
 
+//  获取声明报错附录
 function getDeclarationErrorAddendum() {
+  //  获取fiber所属的名字
   var ownerName = getCurrentFiberOwnerNameInDevOrNull();
   if (ownerName) {
     return '\n\nCheck the render method of `' + ownerName + '`.';
@@ -7270,6 +7285,7 @@ function getDeclarationErrorAddendum() {
 
 var valuePropNames = ['value', 'defaultValue'];
 
+//  验证select的value和defaultvalue的功能
 /**
  * Validation function for `value` and `defaultValue`.
  */
@@ -7278,18 +7294,23 @@ function checkSelectPropTypes(props) {
 
   for (var i = 0; i < valuePropNames.length; i++) {
     var propName = valuePropNames[i];
+    //  如果属性不存在，继续跑
     if (props[propName] == null) {
       continue;
     }
     var isArray = Array.isArray(props[propName]);
+    //  如果有multiple且不是数组
     if (props.multiple && !isArray) {
+      //  value或者defaultValue必须是数组，如果multiple是true的话
       warning$1(false, 'The `%s` prop supplied to <select> must be an array if ' + '`multiple` is true.%s', propName, getDeclarationErrorAddendum());
     } else if (!props.multiple && isArray) {
+      //  如果value或者defaultValue是数组，而multiple是false的话，报错
       warning$1(false, 'The `%s` prop supplied to <select> must be a scalar ' + 'value if `multiple` is false.%s', propName, getDeclarationErrorAddendum());
     }
   }
 }
 
+//  更新option
 function updateOptions(node, multiple, propValue, setDefaultSelected) {
   var options = node.options;
 
@@ -7297,14 +7318,19 @@ function updateOptions(node, multiple, propValue, setDefaultSelected) {
     var selectedValues = propValue;
     var selectedValue = {};
     for (var i = 0; i < selectedValues.length; i++) {
+      //  添加前缀避免混乱
       // Prefix to avoid chaos with special keys.
+      //  以每个值的value加上$作为key,值设定为value
       selectedValue['$' + selectedValues[i]] = true;
     }
     for (var _i = 0; _i < options.length; _i++) {
+      //  判断是否选中
       var selected = selectedValue.hasOwnProperty('$' + options[_i].value);
       if (options[_i].selected !== selected) {
+        //  如果不匹配，同步更新
         options[_i].selected = selected;
       }
+      //  如果选中了，并且要设置默认值，就去设置
       if (selected && setDefaultSelected) {
         options[_i].defaultSelected = true;
       }
