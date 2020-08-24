@@ -7314,6 +7314,7 @@ function checkSelectPropTypes(props) {
 function updateOptions(node, multiple, propValue, setDefaultSelected) {
   var options = node.options;
 
+  //  判断是否是multiple
   if (multiple) {
     var selectedValues = propValue;
     var selectedValue = {};
@@ -7325,6 +7326,7 @@ function updateOptions(node, multiple, propValue, setDefaultSelected) {
     }
     for (var _i = 0; _i < options.length; _i++) {
       //  判断是否选中
+      //  标记多个值
       var selected = selectedValue.hasOwnProperty('$' + options[_i].value);
       if (options[_i].selected !== selected) {
         //  如果不匹配，同步更新
@@ -7336,6 +7338,8 @@ function updateOptions(node, multiple, propValue, setDefaultSelected) {
       }
     }
   } else {
+    //  不要设置select.value,因为这样的操作在所有浏览器下都是不可行的
+
     // Do not set `select.value` as exact behavior isn't consistent across all
     // browsers for all cases.
     var _selectedValue = toString(getToStringValue(propValue));
@@ -7348,16 +7352,28 @@ function updateOptions(node, multiple, propValue, setDefaultSelected) {
         }
         return;
       }
+      //  设置默认值
       if (defaultSelected === null && !options[_i2].disabled) {
         defaultSelected = options[_i2];
       }
     }
+    //  如果defaultSelected不为空，设置选中态
     if (defaultSelected !== null) {
       defaultSelected.selected = true;
     }
   }
 }
 
+//  实现一个select根组件，允许部分设置value和defaultvalue属性。如果multiple是false，
+//  这个属性必须为stringable。如果multiple是true，这个属性必须为一个字符串数组
+
+//  如果value没有提供(为null或者undefined),用户的改变selectedoption的行为将会触发或者更
+//  更新已渲染的options
+
+//  如果提供了value（不为null或者undefined）,用户改变选择的selected的行为将会触发
+//  已渲染option的更新
+
+//  如果提供了defaultValue，任何跟提供的值一致的option都将被选中
 /**
  * Implements a <select> host component that allows optionally setting the
  * props `value` and `defaultValue`. If `multiple` is false, the prop must be a
@@ -7374,12 +7390,14 @@ function updateOptions(node, multiple, propValue, setDefaultSelected) {
  * selected.
  */
 
+ // 获取主属性
 function getHostProps$2(element, props) {
   return _assign({}, props, {
     value: undefined
   });
 }
 
+//  初始化包裹的状态
 function initWrapperState$1(element, props) {
   var node = element;
   {
@@ -7391,13 +7409,18 @@ function initWrapperState$1(element, props) {
   };
 
   {
+    //  相应的配置属性不能为空
     if (props.value !== undefined && props.defaultValue !== undefined && !didWarnValueDefaultValue$1) {
+      //  select元素既不是受控也不是非受控,value和defaultValue的值不能都有
+      //  请选择使用受控和非受控的组件,移除两个属性之一
       warning$1(false, 'Select elements must be either controlled or uncontrolled ' + '(specify either the value prop, or the defaultValue prop, but not ' + 'both). Decide between using a controlled or uncontrolled select ' + 'element and remove one of these props. More info: ' + 'https://fb.me/react-controlled-components');
       didWarnValueDefaultValue$1 = true;
     }
   }
 }
 
+//  发送挂载的容器
+//  根据有value和没有两种情况区分更新属性的操作
 function postMountWrapper$2(element, props) {
   var node = element;
   node.multiple = !!props.multiple;
@@ -7409,6 +7432,7 @@ function postMountWrapper$2(element, props) {
   }
 }
 
+//  发送更新wrapper
 function postUpdateWrapper(element, props) {
   var node = element;
   var wasMultiple = node._wrapperState.wasMultiple;
@@ -7416,18 +7440,23 @@ function postUpdateWrapper(element, props) {
 
   var value = props.value;
   if (value != null) {
+    //  如果有值的话，不设置默认值
     updateOptions(node, !!props.multiple, value, false);
+    //  是否多选不一致
   } else if (wasMultiple !== !!props.multiple) {
+    //  为了简单起见，重用defaultValue,如果multiple是启用的
     // For simplicity, reapply `defaultValue` if `multiple` is toggled.
     if (props.defaultValue != null) {
       updateOptions(node, !!props.multiple, props.defaultValue, true);
     } else {
+      //  翻转到默认的未选中态
       // Revert the select back to its default unselected state.
       updateOptions(node, !!props.multiple, props.multiple ? [] : '', false);
     }
   }
 }
 
+//  存储控制态
 function restoreControlledState$2(element, props) {
   var node = element;
   var value = props.value;
@@ -7437,8 +7466,20 @@ function restoreControlledState$2(element, props) {
   }
 }
 
+//  默认值是否已经告警
 var didWarnValDefaultVal = false;
 
+//  实现一个TextArea主组件，该组件允许设置value和defaultvalue,这跟传统的DOM API
+//  不同，因为value通常是用来作为PCDATA的子元素来设置的
+
+//  如果value并没有提供，（或者提供的是null或者undefined）,用户影响值的行为将会触发
+//  元素的更新
+
+//  如果提供了value（不为null或者undefined），被渲染的元素将不会触发元素的更新，
+//  value属性必须按照顺序改变以便已经渲染的元素去更新
+
+//  已经渲染的元素将会通过一个空值开初始化，如果defautlevalue被指定，或者子元素的
+//  内容被指定(已被废弃)
 /**
  * Implements a <textarea> host component that allows setting `value`, and
  * `defaultValue`. This differs from the traditional DOM API because value is
@@ -7457,8 +7498,15 @@ var didWarnValDefaultVal = false;
 
 function getHostProps$3(element, props) {
   var node = element;
+  //  如果有dangerouslySetInnerHTML的话，告警dangerouslySetInnerHTML
+  //  在textare内没有意义
   !(props.dangerouslySetInnerHTML == null) ? invariant(false, '`dangerouslySetInnerHTML` does not make sense on <textarea>.') : void 0;
 
+  //  通常来说给子元素设置同样的值。在ie9中，选中的范围将会被重置，如果textContent
+  //  被手动改动。我们将会在setTextContent中添加一个检查，以便在value和node上的
+  //  value不一致的时候（这样可以完美解决这个ie9的bug）但是Sebastian和sophie似乎喜欢这个
+  //  解决方式，这个值可以为布尔或者一个对象，这也解释了为什么他必须是一个字符串
+  
   // Always set children to the same thing. In IE9, the selection range will
   // get reset if `textContent` is mutated.  We could add a check in setTextContent
   // to only set the value if/when the value differs from the node value (which would
