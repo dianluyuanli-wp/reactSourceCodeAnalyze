@@ -7506,7 +7506,7 @@ function getHostProps$3(element, props) {
   //  被手动改动。我们将会在setTextContent中添加一个检查，以便在value和node上的
   //  value不一致的时候（这样可以完美解决这个ie9的bug）但是Sebastian和sophie似乎喜欢这个
   //  解决方式，这个值可以为布尔或者一个对象，这也解释了为什么他必须是一个字符串
-  
+
   // Always set children to the same thing. In IE9, the selection range will
   // get reset if `textContent` is mutated.  We could add a check in setTextContent
   // to only set the value if/when the value differs from the node value (which would
@@ -7522,10 +7522,13 @@ function getHostProps$3(element, props) {
   return hostProps;
 }
 
+//  初始化包裹器状态
 function initWrapperState$2(element, props) {
   var node = element;
   {
+    //  检查属性
     ReactControlledValuePropTypes.checkPropTypes('textarea', props);
+    //  既有value又有defaultvalue，textarea元素要么是受控的，要么是非受控的
     if (props.value !== undefined && props.defaultValue !== undefined && !didWarnValDefaultVal) {
       warning$1(false, '%s contains a textarea with both value and defaultValue props. ' + 'Textarea elements must be either controlled or uncontrolled ' + '(specify either the value prop, or the defaultValue prop, but not ' + 'both). Decide between using a controlled or uncontrolled textarea ' + 'and remove one of these props. More info: ' + 'https://fb.me/react-controlled-components', getCurrentFiberOwnerNameInDevOrNull() || 'A component');
       didWarnValDefaultVal = true;
@@ -7533,18 +7536,23 @@ function initWrapperState$2(element, props) {
   }
 
   var initialValue = props.value;
-
+  //  如果我们要使用默认值的话，只需要费心去获取它
   // Only bother fetching default value if we're going to use it
   if (initialValue == null) {
     var defaultValue = props.defaultValue;
+    //  todo: 移除对textare标签中子元素内容的支持
     // TODO (yungsters): Remove support for children content in <textarea>.
     var children = props.children;
+    //  如果children不为null
     if (children != null) {
       {
+        //  告警：使用defaultevaleu或者value来代替设置textarea中的子元素
         warning$1(false, 'Use the `defaultValue` or `value` props instead of setting ' + 'children on <textarea>.');
       }
+      //  如果有默认值，告警:如果你提供了defaultvalue，就不要传children了
       !(defaultValue == null) ? invariant(false, 'If you supply `defaultValue` on a <textarea>, do not pass children.') : void 0;
       if (Array.isArray(children)) {
+        //  如果children是数组，那么告警:textarea只能支持做多一个子元素
         !(children.length <= 1) ? invariant(false, '<textarea> can only have at most one child.') : void 0;
         children = children[0];
       }
@@ -7562,14 +7570,17 @@ function initWrapperState$2(element, props) {
   };
 }
 
+//  更新wrapper
 function updateWrapper$1(element, props) {
   var node = element;
   var value = getToStringValue(props.value);
   var defaultValue = getToStringValue(props.defaultValue);
   if (value != null) {
+    //  将value设置为字符串，确保value被正确设置，尽管浏览器会默认这样做，但是jsdom通常不会
     // Cast `value` to a string to ensure the value is set correctly. While
     // browsers typically do this as necessary, jsdom doesn't.
     var newValue = toString(value);
+    //  为了避免副作用（例如长文本选择），只在值改变的时候设置
     // To avoid side effects (such as losing text selection), only set value if changed
     if (newValue !== node.value) {
       node.value = newValue;
@@ -7578,6 +7589,7 @@ function updateWrapper$1(element, props) {
       node.defaultValue = newValue;
     }
   }
+  //  设置默认值
   if (defaultValue != null) {
     node.defaultValue = toString(defaultValue);
   }
@@ -7585,10 +7597,13 @@ function updateWrapper$1(element, props) {
 
 function postMountWrapper$3(element, props) {
   var node = element;
+  //  这是post-mount，因为我们需要方位dom节点，节点在组件完成加载之前都是不可访问的
   // This is in postMount because we need access to the DOM node, which is not
   // available until after the component has mounted.
   var textContent = node.textContent;
 
+  //  如果textContent等于初始值的话，只设置node.value。在ie10和11中，有一个
+  //  bug,placeholder属性也会成为textContent的组成部分
   // Only set node.value if textContent is equal to the expected
   // initial value. In IE10/IE11 there is a bug where the placeholder attribute
   // will populate textContent as well.
