@@ -7613,11 +7613,13 @@ function postMountWrapper$3(element, props) {
   }
 }
 
+//  储存受控状态
 function restoreControlledState$3(element, props) {
   // DOM component is still mounted; update
   updateWrapper$1(element, props);
 }
 
+//  命名空间
 var HTML_NAMESPACE$1 = 'http://www.w3.org/1999/xhtml';
 var MATH_NAMESPACE = 'http://www.w3.org/1998/Math/MathML';
 var SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
@@ -7628,7 +7630,10 @@ var Namespaces = {
   svg: SVG_NAMESPACE
 };
 
+//  假设没有父命名空间
 // Assumes there is no parent namespace.
+
+//  获取固有的命名空间
 function getIntrinsicNamespace(type) {
   switch (type) {
     case 'svg':
@@ -7642,6 +7647,7 @@ function getIntrinsicNamespace(type) {
 
 function getChildNamespace(parentNamespace, type) {
   if (parentNamespace == null || parentNamespace === HTML_NAMESPACE$1) {
+    //  没有父命名空间：潜在的入口
     // No (or default) parent namespace: potential entry point.
     return getIntrinsicNamespace(type);
   }
@@ -7649,15 +7655,18 @@ function getChildNamespace(parentNamespace, type) {
     // We're leaving SVG.
     return HTML_NAMESPACE$1;
   }
+  //  默认传递命名空间
   // By default, pass namespace below.
   return parentNamespace;
 }
 
 /* globals MSApp */
 
+//  创建一个函数，拥有不安全的特权(windows8的应用需要)
 /**
  * Create a function which has 'unsafe' privileges (required by windows8 apps)
  */
+//  创建微软不安全的本地函数
 var createMicrosoftUnsafeLocalFunction = function (func) {
   if (typeof MSApp !== 'undefined' && MSApp.execUnsafeLocalFunction) {
     return function (arg0, arg1, arg2, arg3) {
@@ -7670,6 +7679,7 @@ var createMicrosoftUnsafeLocalFunction = function (func) {
   }
 };
 
+//  svg的暂时容器，给缺乏innerHTML的ie浏览器使用
 // SVG temp container for IE lacking innerHTML
 var reusableSVGContainer = void 0;
 
@@ -7681,6 +7691,9 @@ var reusableSVGContainer = void 0;
  * @internal
  */
 var setInnerHTML = createMicrosoftUnsafeLocalFunction(function (node, html) {
+  //  IE并没有innerHTML来为svg节点做处理，所以我们注入了新的标志来配合暂时的节点，
+  //  之后我们把子元素节点移动到目标节点中
+
   // IE does not have innerHTML for SVG nodes, so instead we inject the
   // new markup in a temp node and then move the child nodes across into
   // the target node
@@ -7689,12 +7702,15 @@ var setInnerHTML = createMicrosoftUnsafeLocalFunction(function (node, html) {
     reusableSVGContainer = reusableSVGContainer || document.createElement('div');
     reusableSVGContainer.innerHTML = '<svg>' + html + '</svg>';
     var svgNode = reusableSVGContainer.firstChild;
+    //  移除掉老节点
     while (node.firstChild) {
       node.removeChild(node.firstChild);
     }
+    //  加入新节点
     while (svgNode.firstChild) {
       node.appendChild(svgNode.firstChild);
     }
+    //  本质是节点替换
   } else {
     node.innerHTML = html;
   }
