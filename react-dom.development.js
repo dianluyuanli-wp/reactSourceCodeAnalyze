@@ -7716,6 +7716,8 @@ var setInnerHTML = createMicrosoftUnsafeLocalFunction(function (node, html) {
   }
 });
 
+//  设置textContent节点的属性，为了内容的更新，直接设置text的nodeValue比
+//  使用textContent设置来的快（这样会移除已经存在的节点并创建一个新的）
 /**
  * Set the textContent property of a node. For text updates, it's faster
  * to set the `nodeValue` of the Text node directly instead of using
@@ -7726,9 +7728,10 @@ var setInnerHTML = createMicrosoftUnsafeLocalFunction(function (node, html) {
  * @internal
  */
 var setTextContent = function (node, text) {
+  //  如果存在text
   if (text) {
     var firstChild = node.firstChild;
-
+    //  如果node节点仅有一个子元素并且类型为TEXT_NODE，将第一个子元素的nodevalue设置为text
     if (firstChild && firstChild === node.lastChild && firstChild.nodeType === TEXT_NODE) {
       firstChild.nodeValue = text;
       return;
@@ -7737,6 +7740,8 @@ var setTextContent = function (node, text) {
   node.textContent = text;
 };
 
+//  从gecko中解析出来的源码
+//  综合的css属性
 // List derived from Gecko source code:
 // https://github.com/mozilla/gecko-dev/blob/4e638efc71/layout/style/test/property_database.js
 var shorthandToLonghand = {
@@ -7789,6 +7794,7 @@ var shorthandToLonghand = {
   wordWrap: ['overflowWrap']
 };
 
+//  接受数字作为css属性但是单位不是px
 /**
  * CSS properties which accept numbers but are not in units of "px".
  */
@@ -7828,6 +7834,7 @@ var isUnitlessNumber = {
   zIndex: true,
   zoom: true,
 
+  //  svg相关属性
   // SVG-related properties
   fillOpacity: true,
   floodOpacity: true,
@@ -7839,6 +7846,7 @@ var isUnitlessNumber = {
   strokeWidth: true
 };
 
+//  浏览器厂家前缀
 /**
  * @param {string} prefix vendor-specific prefix, eg: Webkit
  * @param {string} key style name, eg: transitionDuration
@@ -7849,12 +7857,16 @@ function prefixKey(prefix, key) {
   return prefix + key.charAt(0).toUpperCase() + key.substring(1);
 }
 
+//  可能的浏览器前缀数组
 /**
  * Support style names that may come passed in prefixed by adding permutations
  * of vendor prefixes.
  */
 var prefixes = ['Webkit', 'ms', 'Moz', 'O'];
 
+//  这里使用Object.keys,否则的话ie8中的for-in循环将会导致无限循环，因为它也会遍历新加入的属性
+
+//  给isUnitlessNumber添加带浏览器前缀的版本
 // Using Object.keys here, or else the vanilla for-in loop makes IE8 go into an
 // infinite loop, because it iterates over the newly added props too.
 Object.keys(isUnitlessNumber).forEach(function (prop) {
@@ -7863,6 +7875,8 @@ Object.keys(isUnitlessNumber).forEach(function (prop) {
   });
 });
 
+//  将一个值变为合适的css可写属性值。style的名字name需要是逻辑的(不能有连字符)，特别是在
+//  CSSProperty.isUnitlessNumber中
 /**
  * Convert a value into the proper css writable value. The style name `name`
  * should be logical (no hyphens), as specified
