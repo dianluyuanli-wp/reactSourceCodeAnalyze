@@ -7886,7 +7886,14 @@ Object.keys(isUnitlessNumber).forEach(function (prop) {
  * @param {*} value CSS property value such as `10px`.
  * @return {string} Normalized style value with dimensions applied.
  */
+
+ // 危险的style值
 function dangerousStyleValue(name, value, isCustomProperty) {
+  //  注意到我们移除了escapeTextForBrowser的调用，因为整个字符串将会被转义，当属性被注入到
+  //  标记中时。如果你提供了不安全的用户数据，他们将会注入任意的css,这可能
+  //  是有问题的。这不是xss的漏洞，但是是一个潜在的css注入问题，该问题
+  //  引发了很大的讨论，关于是否我们应该去相信url。
+
   // Note that we've removed escapeTextForBrowser() calls here since the
   // whole string will be escaped when the attribute is injected into
   // the markup. If you provide unsafe user data here they can inject
@@ -7897,11 +7904,13 @@ function dangerousStyleValue(name, value, isCustomProperty) {
   // which has lead to a greater discussion about how we're going to
   // trust URLs moving forward. See #2115901
 
+  //  是否为空
   var isEmpty = value == null || typeof value === 'boolean' || value === '';
   if (isEmpty) {
     return '';
   }
 
+  //  判断是否需要加px后缀
   if (!isCustomProperty && typeof value === 'number' && value !== 0 && !(isUnitlessNumber.hasOwnProperty(name) && isUnitlessNumber[name])) {
     return value + 'px'; // Presumes implicit 'px' suffix for unitless numbers
   }
@@ -7912,6 +7921,9 @@ function dangerousStyleValue(name, value, isCustomProperty) {
 var uppercasePattern = /([A-Z])/g;
 var msPattern = /^ms-/;
 
+//  使用连字符分隔驼峰css属性名，例如
+
+//  一个现代化的建议，使用-ms-替换ms
 /**
  * Hyphenates a camelcased CSS property name, for example:
  *
@@ -7929,9 +7941,11 @@ function hyphenateStyleName(name) {
   return name.replace(uppercasePattern, '-$1').toLowerCase().replace(msPattern, '-ms-');
 }
 
+//  样式告警
 var warnValidStyle = function () {};
 
 {
+  //  msTransform是对的，但是其他的前缀就有问题了，需要为大写
   // 'msTransform' is correct, but the other prefixes should be capitalized
   var badVendoredStyleNamePattern = /^(?:webkit|moz|o)[A-Z]/;
   var msPattern$1 = /^-ms-/;
