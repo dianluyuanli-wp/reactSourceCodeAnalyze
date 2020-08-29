@@ -7951,6 +7951,7 @@ var warnValidStyle = function () {};
   var msPattern$1 = /^-ms-/;
   var hyphenPattern = /-(.)/g;
 
+  //  样式值不能含有分号
   // style values shouldn't contain a semicolon
   var badStyleValueWithSemicolonPattern = /;\s*$/;
 
@@ -7959,70 +7960,89 @@ var warnValidStyle = function () {};
   var warnedForNaNValue = false;
   var warnedForInfinityValue = false;
 
+  //  驼峰化
   var camelize = function (string) {
     return string.replace(hyphenPattern, function (_, character) {
       return character.toUpperCase();
     });
   };
 
+  //  连字符样式告警
   var warnHyphenatedStyleName = function (name) {
+    //  如果已经警告过，跳出去
     if (warnedStyleNames.hasOwnProperty(name) && warnedStyleNames[name]) {
       return;
     }
 
     warnedStyleNames[name] = true;
+    //  不支持的样式属性，你指的是xxx吗?
     warning$1(false, 'Unsupported style property %s. Did you mean %s?', name,
     // As Andi Smith suggests
     // (http://www.andismith.com/blog/2012/02/modernizr-prefixed/), an `-ms` prefix
     // is converted to lowercase `ms`.
+    //  替换掉微软前缀
     camelize(name.replace(msPattern$1, 'ms-')));
   };
 
+  //  浏览器前缀使用不当告警
   var warnBadVendoredStyleName = function (name) {
     if (warnedStyleNames.hasOwnProperty(name) && warnedStyleNames[name]) {
       return;
     }
 
     warnedStyleNames[name] = true;
+    //  不支持的浏览器前缀，你指的是xxx吗
+    //  首字母还要大写
     warning$1(false, 'Unsupported vendor-prefixed style property %s. Did you mean %s?', name, name.charAt(0).toUpperCase() + name.slice(1));
   };
 
+  //  有分号也要告警
   var warnStyleValueWithSemicolon = function (name, value) {
     if (warnedStyleValues.hasOwnProperty(value) && warnedStyleValues[value]) {
       return;
     }
 
     warnedStyleValues[value] = true;
-    warning$1(false, "Style property values shouldn't contain a semicolon. " + 'Try "%s: %s" instead.', name, value.replace(badStyleValueWithSemicolonPattern, ''));
+    //  样式属性不能包含分号，请尝试其他来替换
+    warning$1(false, "Style property values shouldn't contain a semicolon. " + 'Try "%s: %s" instead.', name, value.replace(badStyleValueWithSemicolonPattern, ''));  //  替换掉分号的值
   };
 
+  //  style值为NaN告警
   var warnStyleValueIsNaN = function (name, value) {
     if (warnedForNaNValue) {
       return;
     }
 
     warnedForNaNValue = true;
+    //  NaN不能作为css属性
     warning$1(false, '`NaN` is an invalid value for the `%s` css style property.', name);
   };
 
+  //  infinity样式告警
   var warnStyleValueIsInfinity = function (name, value) {
     if (warnedForInfinityValue) {
       return;
     }
 
     warnedForInfinityValue = true;
+    //  infinity不能作为css属性值
     warning$1(false, '`Infinity` is an invalid value for the `%s` css style property.', name);
   };
 
+  //  告警校验样式
   warnValidStyle = function (name, value) {
+    //  如果没有连字符
     if (name.indexOf('-') > -1) {
       warnHyphenatedStyleName(name);
+      //  如果有错误的浏览器前缀
     } else if (badVendoredStyleNamePattern.test(name)) {
       warnBadVendoredStyleName(name);
+      //  如果有错误的分号前缀
     } else if (badStyleValueWithSemicolonPattern.test(value)) {
       warnStyleValueWithSemicolon(name, value);
     }
 
+    //  针对NaN和Infinity进行处理
     if (typeof value === 'number') {
       if (isNaN(value)) {
         warnStyleValueIsNaN(name, value);
