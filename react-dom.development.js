@@ -8135,6 +8135,8 @@ function isValueEmpty(value) {
   return value == null || typeof value === 'boolean' || value === '';
 }
 
+//  扩展短手映射，这个可以作为overflowY属性被扩展。返回值是每个
+//  特征属性可以被扩展的内容
 /**
  * Given {color: 'red', overflow: 'hidden'} returns {
  *   color: 'color',
@@ -8146,7 +8148,9 @@ function isValueEmpty(value) {
 function expandShorthandMap(styles) {
   var expanded = {};
   for (var key in styles) {
+    //  查表
     var longhands = shorthandToLonghand[key] || [key];
+    //  扩展长手属性
     for (var i = 0; i < longhands.length; i++) {
       expanded[longhands[i]] = key;
     }
@@ -8154,6 +8158,11 @@ function expandShorthandMap(styles) {
   return expanded;
 }
 
+//  当长手和短手的属性同时存在时，我们将会告警，这里将会预期出现一个
+//  不正确的结果。通常情况下我们会做如下警告：
+//  更新短手属性（长手属性将会被覆盖）
+//  移除短手属性，长手属性也会别移除
+//  移除长手属性，将会被转换为短手属性
 /**
  * When mixing shorthand and longhand property names, we warn during updates if
  * we expect an incorrect result to occur. In particular, we warn for:
@@ -8168,7 +8177,9 @@ function expandShorthandMap(styles) {
  *   {font: 'foo', fontVariant: 'bar'} -> {font: 'foo'}
  *   becomes .style.fontVariant = ''
  */
+//  在开发环境下校验短手属性的冲突
 function validateShorthandPropertyCollisionInDev(styleUpdates, nextStyles) {
+  //  避免重复
   if (!warnAboutShorthandPropertyCollision) {
     return;
   }
