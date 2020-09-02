@@ -8183,28 +8183,33 @@ function validateShorthandPropertyCollisionInDev(styleUpdates, nextStyles) {
   if (!warnAboutShorthandPropertyCollision) {
     return;
   }
-
+  //  没有nextStyle的时候返回
   if (!nextStyles) {
     return;
   }
-
+  //  将styleUpdate速记属性进行处理
   var expandedUpdates = expandShorthandMap(styleUpdates);
   var expandedStyles = expandShorthandMap(nextStyles);
   var warnedAbout = {};
   for (var key in expandedUpdates) {
+    //  提取原始的key
     var originalKey = expandedUpdates[key];
     var correctOriginalKey = expandedStyles[key];
     if (correctOriginalKey && originalKey !== correctOriginalKey) {
       var warningKey = originalKey + ',' + correctOriginalKey;
+      //  如果已经记录了，就跳过
       if (warnedAbout[warningKey]) {
         continue;
       }
       warnedAbout[warningKey] = true;
+      //  样式属性在渲染时遭遇了一个冲突的属性，这会导致样式bug
+      //  为了解决这个问题，不要混用速记属性和非速记属性，将速记属性用展开值替换
       warning$1(false, '%s a style property during rerender (%s) when a ' + 'conflicting property is set (%s) can lead to styling bugs. To ' + "avoid this, don't mix shorthand and non-shorthand properties " + 'for the same value; instead, replace the shorthand with ' + 'separate values.', isValueEmpty(styleUpdates[originalKey]) ? 'Removing' : 'Updating', originalKey, correctOriginalKey);
     }
   }
 }
 
+//  对html而言，特殊的标签需要省略他们对应的闭合标记，在这里我们维护一个白名单
 // For HTML, certain tags should omit their close tag. We keep a whitelist for
 // those special-case tags.
 
@@ -8224,20 +8229,28 @@ var omittedCloseTags = {
   source: true,
   track: true,
   wbr: true
+
+  //  注意，menuitem的闭合标记需要被废弃，但是这样会导致一些问题
   // NOTE: menuitem's close tag should be omitted, but that causes problems.
 };
 
+//  对html而言，特殊的tags不能含有子元素。这里和omittedCloseTags一样，除非menuitem,
+//  他需要有自己的闭合标签
 // For HTML, certain tags cannot have children. This has the same purpose as
 // `omittedCloseTags` except that `menuitem` should still have its closing tag.
 
+//  空元素的标签
 var voidElementTags = _assign({
   menuitem: true
 }, omittedCloseTags);
 
+//  我们将会移除这个，如果我们添加invariantWithStack,或者添加
+//  默认堆栈（在可能的地方）
 // TODO: We can remove this if we add invariantWithStack()
 // or add stack by default to invariants where possible.
 var HTML$1 = '__html';
 
+//  debug的堆栈
 var ReactDebugCurrentFrame$2 = null;
 {
   ReactDebugCurrentFrame$2 = ReactSharedInternals.ReactDebugCurrentFrame;
@@ -8249,15 +8262,25 @@ function assertValidProps(tag, props) {
   }
   // Note the use of `==` which checks for null or undefined.
   if (voidElementTags[tag]) {
+    //  如果有children或者通过dangerouslyInnerHtml写入的子元素就告警
+    //  xxx是一个空元素标签，不能含有children或者使用dangerouslySetInnerHTML
     !(props.children == null && props.dangerouslySetInnerHTML == null) ? invariant(false, '%s is a void element tag and must neither have `children` nor use `dangerouslySetInnerHTML`.%s', tag, ReactDebugCurrentFrame$2.getStackAddendum()) : void 0;
   }
+  //  如果dangerouslySetInnerHTML不为空
   if (props.dangerouslySetInnerHTML != null) {
+    //  children和dangerouslySetInnerHTML只能同时设置一个
     !(props.children == null) ? invariant(false, 'Can only set one of `children` or `props.dangerouslySetInnerHTML`.') : void 0;
+    //  如果dangerouslySetInnerHTML类型不是obj，或者obj不含有__html属性
+    //  props.dangerouslySetInnerHTML的形式必须是{ _html: xx } 
     !(typeof props.dangerouslySetInnerHTML === 'object' && HTML$1 in props.dangerouslySetInnerHTML) ? invariant(false, '`props.dangerouslySetInnerHTML` must be in the form `{__html: ...}`. Please visit https://fb.me/react-invariant-dangerously-set-inner-html for more information.') : void 0;
   }
   {
+    //  一个组件是可编辑的或者包含被react控制的组件,这就需要你来保证这个组件不会被重复渲染或者意外修改
+    //  这种行为不是故意为之
     !(props.suppressContentEditableWarning || !props.contentEditable || props.children == null) ? warning$1(false, 'A component is `contentEditable` and contains `children` managed by ' + 'React. It is now your responsibility to guarantee that none of ' + 'those nodes are unexpectedly modified or duplicated. This is ' + 'probably not intentional.') : void 0;
   }
+  //  当props.style非空而类型不是obj时告警
+  //  style期待一个从属性名到合适的值的映射 类似于style={{marginRight: spacing + \'em\'}}，在jsx中使用的时候
   !(props.style == null || typeof props.style === 'object') ? invariant(false, 'The `style` prop expects a mapping from style properties to values, not a string. For example, style={{marginRight: spacing + \'em\'}} when using JSX.%s', ReactDebugCurrentFrame$2.getStackAddendum()) : void 0;
 }
 
