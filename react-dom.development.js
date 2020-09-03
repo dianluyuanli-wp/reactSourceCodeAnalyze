@@ -8284,11 +8284,16 @@ function assertValidProps(tag, props) {
   !(props.style == null || typeof props.style === 'object') ? invariant(false, 'The `style` prop expects a mapping from style properties to values, not a string. For example, style={{marginRight: spacing + \'em\'}} when using JSX.%s', ReactDebugCurrentFrame$2.getStackAddendum()) : void 0;
 }
 
+//  是常规组件
 function isCustomComponent(tagName, props) {
   if (tagName.indexOf('-') === -1) {
     return typeof props.is === 'string';
   }
   switch (tagName) {
+    //  这里有一些SVG和MathML元素
+    //  我们并不在意白名单过多，因为我们认为他永远也不会增加新的
+    //  另一种方法是在一些复杂的地方跟踪名称空间
+
     // These are reserved SVG and MathML elements.
     // We don't mind this whitelist too much because we expect it to never grow.
     // The alternative is to track the namespace in a few places which is convoluted.
@@ -8301,12 +8306,15 @@ function isCustomComponent(tagName, props) {
     case 'font-face-format':
     case 'font-face-name':
     case 'missing-glyph':
+      //  这些属性是false
       return false;
     default:
       return true;
   }
 }
 
+//  当给html或者svg白名单增加属性的时候，也要确保给这个模块添加，
+//  以便确保大小写和名字告警生效
 // When adding attributes to the HTML or SVG whitelist, be sure to
 // also add them to this module to ensure casing and incorrect name
 // warnings.
@@ -8796,6 +8804,7 @@ var possibleStandardNames = {
   zoomandpan: 'zoomAndPan'
 };
 
+//  aria 属性
 var ariaProperties = {
   'aria-current': 0, // state
   'aria-details': 0,
@@ -8851,30 +8860,44 @@ var ariaProperties = {
   'aria-setsize': 0
 };
 
+//  警告属性
 var warnedProperties = {};
+//  正则匹配aria的属性
 var rARIA = new RegExp('^(aria)-[' + ATTRIBUTE_NAME_CHAR + ']*$');
+//  驼峰形式的名字匹配
 var rARIACamel = new RegExp('^(aria)[A-Z][' + ATTRIBUTE_NAME_CHAR + ']*$');
 
 var hasOwnProperty$2 = Object.prototype.hasOwnProperty;
 
+//  验证属性
 function validateProperty(tagName, name) {
+  //  是自有属性且值为非空
   if (hasOwnProperty$2.call(warnedProperties, name) && warnedProperties[name]) {
     return true;
   }
 
+  //  如果是驼峰类型的属性名
   if (rARIACamel.test(name)) {
+    //  先转换为正确的属性名
     var ariaName = 'aria-' + name.slice(4).toLowerCase();
     var correctName = ariaProperties.hasOwnProperty(ariaName) ? ariaName : null;
 
+    //  如果这个属性不是aria属性，但是也不在已知的DOM属性里面，那么这就是一个
+    //  不可用的aria-属性
     // If this is an aria-* attribute, but is not listed in the known DOM
     // DOM properties, then it is an invalid aria-* attribute.
+    //  如果没有正确的属性名
+    //  告警:不可用的aria属性，aria属性必须按照aria-*的格式，且需要为小写
     if (correctName == null) {
       warning$1(false, 'Invalid ARIA attribute `%s`. ARIA attributes follow the pattern aria-* and must be lowercase.', name);
       warnedProperties[name] = true;
       return true;
     }
+    //  aria-*属性必须是小写的，这里推荐小写的版本
     // aria-* attributes should be lowercase; suggest the lowercase version.
+    //  如果name和目标名不一致
     if (name !== correctName) {
+      //  告警:不可用的aria属性，你指的是'correctName'吗？
       warning$1(false, 'Invalid ARIA attribute `%s`. Did you mean `%s`?', name, correctName);
       warnedProperties[name] = true;
       return true;
@@ -8882,9 +8905,13 @@ function validateProperty(tagName, name) {
   }
 
   if (rARIA.test(name)) {
+    //  全小写版本
     var lowerCasedName = name.toLowerCase();
+    //  获取标准名字
     var standardName = ariaProperties.hasOwnProperty(lowerCasedName) ? lowerCasedName : null;
 
+    //  如果这是一个aria-*属性，但是他并不在DOM属性列表中
+    //  那么它就是一个不可用的aria-*属性
     // If this is an aria-* attribute, but is not listed in the known DOM
     // DOM properties, then it is an invalid aria-* attribute.
     if (standardName == null) {
@@ -8892,6 +8919,7 @@ function validateProperty(tagName, name) {
       return false;
     }
     // aria-* attributes should be lowercase; suggest the lowercase version.
+    //  aria-*属性需要为小写版本，假设其为小写版本
     if (name !== standardName) {
       warning$1(false, 'Unknown ARIA attribute `%s`. Did you mean `%s`?', name, standardName);
       warnedProperties[name] = true;
@@ -8902,6 +8930,7 @@ function validateProperty(tagName, name) {
   return true;
 }
 
+//  验证不可用的aria属性
 function warnInvalidARIAProps(type, props) {
   var invalidProps = [];
 
