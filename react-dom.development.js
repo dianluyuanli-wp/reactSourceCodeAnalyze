@@ -8933,21 +8933,23 @@ function validateProperty(tagName, name) {
 //  验证不可用的aria属性
 function warnInvalidARIAProps(type, props) {
   var invalidProps = [];
-
+  //  遍历props的key
   for (var key in props) {
     var isValid = validateProperty(type, key);
+    //  如果不可用，直接push到props里
     if (!isValid) {
       invalidProps.push(key);
     }
   }
-
+  //  未知属性字符串处理下，用逗号分隔
   var unknownPropString = invalidProps.map(function (prop) {
     return '`' + prop + '`';
   }).join(', ');
-
+  //  不可用属性xxx在tag上
   if (invalidProps.length === 1) {
     warning$1(false, 'Invalid aria prop %s on <%s> tag. ' + 'For details, see https://fb.me/invalid-aria-prop', unknownPropString, type);
   } else if (invalidProps.length > 1) {
+    //  如果有多余一个的属性，拼接
     warning$1(false, 'Invalid aria props %s on <%s> tag. ' + 'For details, see https://fb.me/invalid-aria-prop', unknownPropString, type);
   }
 }
