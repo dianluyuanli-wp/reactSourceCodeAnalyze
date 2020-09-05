@@ -8954,10 +8954,13 @@ function warnInvalidARIAProps(type, props) {
   }
 }
 
+//  验证属性
 function validateProperties(type, props) {
+  //  如果是通常组件
   if (isCustomComponent(type, props)) {
     return;
   }
+  //  警告不可用的aria属性
   warnInvalidARIAProps(type, props);
 }
 
@@ -8967,10 +8970,12 @@ function validateProperties$1(type, props) {
   if (type !== 'input' && type !== 'textarea' && type !== 'select') {
     return;
   }
-
+  //  如果value为null且为告警
   if (props != null && props.value === null && !didWarnValueNull) {
     didWarnValueNull = true;
+    //  如果是select且为multiple
     if (type === 'select' && props.multiple) {
+      //  value不能为null,当multiple为true时，请使用[]作为输入来清空受控组件，非受控组件使用undefined来清空
       warning$1(false, '`value` prop on `%s` should not be null. ' + 'Consider using an empty array when `multiple` is set to `true` ' + 'to clear the component or `undefined` for uncontrolled components.', type);
     } else {
       warning$1(false, '`value` prop on `%s` should not be null. ' + 'Consider using an empty string to clear the component or `undefined` ' + 'for uncontrolled components.', type);
@@ -8983,9 +8988,13 @@ var validateProperty$1 = function () {};
 {
   var warnedProperties$1 = {};
   var _hasOwnProperty = Object.prototype.hasOwnProperty;
+  //  事件名正则
   var EVENT_NAME_REGEX = /^on./;
+  //  不可用的事件名
   var INVALID_EVENT_NAME_REGEX = /^on[^A-Z]/;
+  //  aria属性的正则匹配
   var rARIA$1 = new RegExp('^(aria)-[' + ATTRIBUTE_NAME_CHAR + ']*$');
+  //  aria的驼峰版本正则匹配
   var rARIACamel$1 = new RegExp('^(aria)[A-Z][' + ATTRIBUTE_NAME_CHAR + ']*$');
 
   validateProperty$1 = function (tagName, name, value, canUseEventSystem) {
