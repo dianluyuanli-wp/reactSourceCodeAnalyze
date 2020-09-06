@@ -8998,17 +8998,21 @@ var validateProperty$1 = function () {};
   var rARIACamel$1 = new RegExp('^(aria)[A-Z][' + ATTRIBUTE_NAME_CHAR + ']*$');
 
   validateProperty$1 = function (tagName, name, value, canUseEventSystem) {
+    //  如果已经登记过，直接返回true
     if (_hasOwnProperty.call(warnedProperties$1, name) && warnedProperties$1[name]) {
       return true;
     }
-
+    //  获取小写的名字
     var lowerCasedName = name.toLowerCase();
+    //  如果是onfocusin或者onfocusout，告警
+    //  react使用onfocus和onblur来替代onfocusin和onfocusout,所有的react事件都是标准化的
+    //  都会被冒泡，所以react没有必要支持这两个事件
     if (lowerCasedName === 'onfocusin' || lowerCasedName === 'onfocusout') {
       warning$1(false, 'React uses onFocus and onBlur instead of onFocusIn and onFocusOut. ' + 'All React events are normalized to bubble, so onFocusIn and onFocusOut ' + 'are not needed/supported by React.');
       warnedProperties$1[name] = true;
       return true;
     }
-
+    //  我们并不能依赖服务器上的事件系统
     // We can't rely on the event system being injected on the server.
     if (canUseEventSystem) {
       if (registrationNameModules.hasOwnProperty(name)) {
@@ -9016,20 +9020,25 @@ var validateProperty$1 = function () {};
       }
       var registrationName = possibleRegistrationNames.hasOwnProperty(lowerCasedName) ? possibleRegistrationNames[lowerCasedName] : null;
       if (registrationName != null) {
+        //  如果不存在，有不可用的事件句柄属性，你指的是xxx吗？
         warning$1(false, 'Invalid event handler property `%s`. Did you mean `%s`?', name, registrationName);
         warnedProperties$1[name] = true;
         return true;
       }
       if (EVENT_NAME_REGEX.test(name)) {
+        //  未知的事件句柄属性，将会被忽略
         warning$1(false, 'Unknown event handler property `%s`. It will be ignored.', name);
         warnedProperties$1[name] = true;
         return true;
       }
     } else if (EVENT_NAME_REGEX.test(name)) {
+      //  如果没有事件插件被注入，我们就在服务器环境，所以我们就无法确认事件名是否正确
+      //  但是我们可以过滤掉那些已知的属性，例如onclick.但是我们不能推荐一个确认的替代
       // If no event plugins have been injected, we are in a server environment.
       // So we can't tell if the event name is correct for sure, but we can filter
       // out known bad ones like `onclick`. We can't suggest a specific replacement though.
       if (INVALID_EVENT_NAME_REGEX.test(name)) {
+        //  不可用的事件句柄属性，react事件使用驼峰命名，例如onClick
         warning$1(false, 'Invalid event handler property `%s`. ' + 'React events use the camelCase naming convention, for example `onClick`.', name);
       }
       warnedProperties$1[name] = true;
