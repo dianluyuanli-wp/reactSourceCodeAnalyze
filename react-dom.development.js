@@ -9045,29 +9045,34 @@ var validateProperty$1 = function () {};
       return true;
     }
 
+    //  使用aria来hook可用的aria属性
     // Let the ARIA attribute hook validate ARIA attributes
     if (rARIA$1.test(name) || rARIACamel$1.test(name)) {
       return true;
     }
-
+    //  如果是innerhtml
     if (lowerCasedName === 'innerhtml') {
+      //  告警：不允许直接设置innerhtml,更多信息请查询dangerouslySetInnerHTML的文档
       warning$1(false, 'Directly setting property `innerHTML` is not permitted. ' + 'For more information, lookup documentation on `dangerouslySetInnerHTML`.');
       warnedProperties$1[name] = true;
       return true;
     }
-
+    //  如果是aria,告警
+    //  aria是react中的保留字，为未来使用，请使用aria-开头的属性来替代
     if (lowerCasedName === 'aria') {
       warning$1(false, 'The `aria` attribute is reserved for future use in React. ' + 'Pass individual `aria-` attributes instead.');
       warnedProperties$1[name] = true;
       return true;
     }
-
+    //  如果是is,
+    //  接收到了is属性，请传入string
     if (lowerCasedName === 'is' && value !== null && value !== undefined && typeof value !== 'string') {
       warning$1(false, 'Received a `%s` for a string attribute `is`. If this is expected, cast ' + 'the value to a string.', typeof value);
       warnedProperties$1[name] = true;
       return true;
     }
-
+    //  如果是数字并且是NaN
+    //  收到了nan作为属性，如果这是预期内的，请将其作为字符串传入
     if (typeof value === 'number' && isNaN(value)) {
       warning$1(false, 'Received NaN for the `%s` attribute. If this is expected, cast ' + 'the value to a string.', name);
       warnedProperties$1[name] = true;
@@ -9077,17 +9082,23 @@ var validateProperty$1 = function () {};
     var propertyInfo = getPropertyInfo(name);
     var isReserved = propertyInfo !== null && propertyInfo.type === RESERVED;
 
+    //  已知的属性需要匹配属性中的大小写配置
     // Known attributes should match the casing specified in the property config.
     if (possibleStandardNames.hasOwnProperty(lowerCasedName)) {
       var standardName = possibleStandardNames[lowerCasedName];
       if (standardName !== name) {
+        //  不可用的dom属性，你指的是xxx吗?
         warning$1(false, 'Invalid DOM property `%s`. Did you mean `%s`?', name, standardName);
         warnedProperties$1[name] = true;
         return true;
       }
+      //  如果不是保留字并且与小写版本的不符合
     } else if (!isReserved && name !== lowerCasedName) {
+      //  未知的属性应该有小写版本，因为在后端渲染时都会被转换的
       // Unknown attributes should have lowercase casing since that's how they
       // will be cased anyway with server rendering.
+      //  react不识别dom元素中的这个属性，如果你想要让它在dom中作为一个常规属性存在，
+      //  请用小写模式拼写。如果你偶然从父组件传递进来，请将其从dom中移除
       warning$1(false, 'React does not recognize the `%s` prop on a DOM element. If you ' + 'intentionally want it to appear in the DOM as a custom ' + 'attribute, spell it as lowercase `%s` instead. ' + 'If you accidentally passed it from a parent component, remove ' + 'it from the DOM element.', name, lowerCasedName);
       warnedProperties$1[name] = true;
       return true;
@@ -9095,28 +9106,35 @@ var validateProperty$1 = function () {};
 
     if (typeof value === 'boolean' && shouldRemoveAttributeWithWarning(name, value, propertyInfo, false)) {
       if (value) {
+        //  非布尔属性收到了布尔属性的值,如果你想在dom中使用，请传入一个字符串
         warning$1(false, 'Received `%s` for a non-boolean attribute `%s`.\n\n' + 'If you want to write it to the DOM, pass a string instead: ' + '%s="%s" or %s={value.toString()}.', value, name, name, value, name);
       } else {
+        //  如果想使用条件表达式，请使用三元表达式xxx ? xxx : xxx
         warning$1(false, 'Received `%s` for a non-boolean attribute `%s`.\n\n' + 'If you want to write it to the DOM, pass a string instead: ' + '%s="%s" or %s={value.toString()}.\n\n' + 'If you used to conditionally omit it with %s={condition && value}, ' + 'pass %s={condition ? value : undefined} instead.', value, name, name, value, name, name, name);
       }
       warnedProperties$1[name] = true;
       return true;
     }
 
+    //  现在我们只校验大小写，并不校验数据的保留属性
     // Now that we've validated casing, do not validate
     // data types for reserved props
     if (isReserved) {
       return true;
     }
 
+    //  当一个已知属性是坏的类型时告警
     // Warn when a known attribute is a bad type
     if (shouldRemoveAttributeWithWarning(name, value, propertyInfo, false)) {
       warnedProperties$1[name] = true;
       return false;
     }
 
+    //  在一个bool属性值传入'true'或者'false'的字符串时告警
     // Warn when passing the strings 'false' or 'true' into a boolean prop
     if ((value === 'false' || value === 'true') && propertyInfo !== null && propertyInfo.type === BOOLEAN) {
+      //  bool值收到了一个字符串属性，你是想要xxx吗？浏览器将会把它识别为真值
+      //  在你传入'false'的时候，获得的结果可能跟预期不一致
       warning$1(false, 'Received the string `%s` for the boolean attribute `%s`. ' + '%s ' + 'Did you mean %s={%s}?', value, name, value === 'false' ? 'The browser will interpret it as a truthy value.' : 'Although this works, it will not work as expected if you pass the string "false".', name, value);
       warnedProperties$1[name] = true;
       return true;
