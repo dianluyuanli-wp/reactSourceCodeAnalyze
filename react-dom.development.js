@@ -9144,25 +9144,32 @@ var validateProperty$1 = function () {};
   };
 }
 
+//  warn未知属性
 var warnUnknownProperties = function (type, props, canUseEventSystem) {
   var unknownProps = [];
   for (var key in props) {
+    //  如果不可用
     var isValid = validateProperty$1(type, key, props[key], canUseEventSystem);
     if (!isValid) {
+      //  push进数组
       unknownProps.push(key);
     }
   }
-
+  //  拼接所有的未知属性
   var unknownPropString = unknownProps.map(function (prop) {
     return '`' + prop + '`';
   }).join(', ');
+  //  如果长度为1
   if (unknownProps.length === 1) {
+    //  标签xxx上有不可用的属性xxx,要么移除这个元素，要么传入一个字符串
     warning$1(false, 'Invalid value for prop %s on <%s> tag. Either remove it from the element, ' + 'or pass a string or number value to keep it in the DOM. ' + 'For details, see https://fb.me/react-attribute-behavior', unknownPropString, type);
   } else if (unknownProps.length > 1) {
+    //  类似，
     warning$1(false, 'Invalid values for props %s on <%s> tag. Either remove them from the element, ' + 'or pass a string or number value to keep them in the DOM. ' + 'For details, see https://fb.me/react-attribute-behavior', unknownPropString, type);
   }
 };
 
+//  检验属性v2
 function validateProperties$2(type, props, canUseEventSystem) {
   if (isCustomComponent(type, props)) {
     return;
@@ -9170,8 +9177,11 @@ function validateProperties$2(type, props, canUseEventSystem) {
   warnUnknownProperties(type, props, canUseEventSystem);
 }
 
+//  TODO:直接引入是不好的，请修复
 // TODO: direct imports like some-package/src/* are bad. Fix me.
+//  不可用的混合渲染是否告警
 var didWarnInvalidHydration = false;
+//  阴影dom是否告警
 var didWarnShadyDOM = false;
 
 var DANGEROUSLY_SET_INNER_HTML = 'dangerouslySetInnerHTML';
@@ -9182,6 +9192,7 @@ var CHILDREN = 'children';
 var STYLE$1 = 'style';
 var HTML = '__html';
 
+//  命名空间
 var HTML_NAMESPACE = Namespaces.html;
 
 
@@ -9199,22 +9210,31 @@ var normalizeMarkupForTextOrAttribute = void 0;
 var normalizeHTML = void 0;
 
 {
+  //  未知tag警告
   warnedUnknownTags = {
+    //  chrome是唯一没有实现time标签的主流浏览器。但是到了2017年的六月，chorme
+    //  才开始实现这个广泛使用的标签。我们尝试不去警告time标签如果chorome没有被
+    //  chrome识别出来，因为很快就会支持了，毕竟很多app已经在使用了
+  
     // Chrome is the only major browser not shipping <time>. But as of July
     // 2017 it intends to ship it due to widespread usage. We intentionally
     // *don't* warn for <time> even if it's unrecognized by Chrome because
     // it soon will be, and many apps have been using it anyway.
     time: true,
     // There are working polyfills for <dialog>. Let people use it.
+    //  有针对dialog的polyfills
     dialog: true,
+    //  electron封装了标砖的webview标签来展示额外的web内容，他们工作在单独的框架和进程中
+    //  这个标签在非electron的环境中不会出现，例如jsdom用它来实现测试目的
     // Electron ships a custom <webview> tag to display external web content in
-    // an isolated frame and process.
+    // an isolated frame and process.  
     // This tag is not present in non Electron environments such as JSDom which
     // is often used for testing purposes.
     // @see https://electronjs.org/docs/api/webview-tag
     webview: true
   };
 
+  //  验证开发环境中的属性
   validatePropertiesInDevelopment = function (type, props) {
     validateProperties(type, props);
     validateProperties$1(type, props);
