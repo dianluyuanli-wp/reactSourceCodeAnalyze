@@ -9241,6 +9241,12 @@ var normalizeHTML = void 0;
     validateProperties$2(type, props, /* canUseEventSystem */true);
   };
 
+  //  ie11 解析和处理style属性与其他浏览器的行为不一致。它添加了空格并且给
+  //  属性进行了排序（并不是按照字母顺序）。为了处理这个需要给css属性排序，
+  //  在客户端和服务器端都要排序，并且使用expectedStyle这个属性在一个暂时
+  //  dom上来读取它的style来标准化.因为这个逻辑只是给ie做的，我们将会跳过
+  //  style 的告警，浏览器讲题我们完成一系列工作
+
   // IE 11 parses & normalizes the style attribute as opposed to other
   // browsers. It adds spaces and sorts the properties in some
   // non-alphabetical order. Handling that would require sorting CSS
@@ -9251,45 +9257,63 @@ var normalizeHTML = void 0;
   // See https://github.com/facebook/react/issues/11807
   canDiffStyleForHydrationWarning = canUseDOM && !document.documentMode;
 
+  //  html解析将cr和crlf替换为lf,还可以将\u0000为\ufffd
+  //  如果我们有错误的匹配，有可能触发这个问题，我们会给这个特性打补丁，但是并不会触发告警。
+
   // HTML parsing normalizes CR and CRLF to LF.
   // It also can turn \u0000 into \uFFFD inside attributes.
   // https://www.w3.org/TR/html5/single-page.html#preprocessing-the-input-stream
   // If we have a mismatch, it might be caused by that.
   // We will still patch up in this case but not fire the warning.
+
+  //  标准化新一行内容的正则
   var NORMALIZE_NEWLINES_REGEX = /\r\n?/g;
+  //  替换特殊字符
+  //  \u0000表示空字符
   var NORMALIZE_NULL_AND_REPLACEMENT_REGEX = /\u0000|\uFFFD/g;
 
+  //  text或者属性的标准化标记
   normalizeMarkupForTextOrAttribute = function (markup) {
+    //  替换掉一些特殊字符
     var markupString = typeof markup === 'string' ? markup : '' + markup;
     return markupString.replace(NORMALIZE_NEWLINES_REGEX, '\n').replace(NORMALIZE_NULL_AND_REPLACEMENT_REGEX, '');
   };
 
+  //  文本diff告警
   warnForTextDifference = function (serverText, clientText) {
+    //  是否已经警告过不可用的hydration
     if (didWarnInvalidHydration) {
       return;
     }
+    //  标准化内容文本或者属性的替换
     var normalizedClientText = normalizeMarkupForTextOrAttribute(clientText);
     var normalizedServerText = normalizeMarkupForTextOrAttribute(serverText);
+    //  如果二者一致，直接返回
     if (normalizedServerText === normalizedClientText) {
       return;
     }
     didWarnInvalidHydration = true;
+    //  告警: text内容服务器端和客户端不匹配
     warningWithoutStack$1(false, 'Text content did not match. Server: "%s" Client: "%s"', normalizedServerText, normalizedClientText);
   };
 
+  //  属性diff比较
   warnForPropDifference = function (propName, serverValue, clientValue) {
     if (didWarnInvalidHydration) {
       return;
     }
+    //  分别对客户端和服务器端的内容替换掉一些特殊字符
     var normalizedClientValue = normalizeMarkupForTextOrAttribute(clientValue);
     var normalizedServerValue = normalizeMarkupForTextOrAttribute(serverValue);
     if (normalizedServerValue === normalizedClientValue) {
       return;
     }
     didWarnInvalidHydration = true;
+    //  参数在客户端和服务端不匹配
     warningWithoutStack$1(false, 'Prop `%s` did not match. Server: %s Client: %s', propName, JSON.stringify(normalizedServerValue), JSON.stringify(normalizedClientValue));
   };
 
+  //  提取属性的告警
   warnForExtraAttributes = function (attributeNames) {
     if (didWarnInvalidHydration) {
       return;
@@ -9299,20 +9323,28 @@ var normalizeHTML = void 0;
     attributeNames.forEach(function (name) {
       names.push(name);
     });
+    //  从服务器提取出来这些属性
     warningWithoutStack$1(false, 'Extra attributes from the server: %s', names);
   };
-
+  //  这对不可用的监听器的告警
   warnForInvalidEventListener = function (registrationName, listener) {
     if (listener === false) {
+      //  期望中listener应该是一个函数，这里得到false
       warning$1(false, 'Expected `%s` listener to be a function, instead got `false`.\n\n' + 'If you used to conditionally omit it with %s={condition && value}, ' + 'pass %s={condition ? value : undefined} instead.', registrationName, registrationName, registrationName);
     } else {
+      //  期望一个函数，但是得到xxx类型
       warning$1(false, 'Expected `%s` listener to be a function, instead got a value of `%s` type.', registrationName, typeof listener);
     }
   };
 
+  //  解析html并且阅读返回标准化的html字符串，使我们可以开始比较
+
   // Parse the HTML and read it back to normalize the HTML string so that it
   // can be used for comparison.
   normalizeHTML = function (parent, html) {
+    //  我们创建了一个分开的文档来避免重新初始化标准化标签（如果存在的话）。但是这样
+    //  破坏了<noscript>标签被处理的逻辑，所以我们使用同一个标签
+  
     // We could have created a separate document here to avoid
     // re-initializing custom elements if they exist. But this breaks
     // how <noscript> is being handled. So we use the same document.
@@ -9323,19 +9355,26 @@ var normalizeHTML = void 0;
   };
 }
 
+//  确保监听
 function ensureListeningTo(rootContainerElement, registrationName) {
+  //  是否是根类型
   var isDocumentOrFragment = rootContainerElement.nodeType === DOCUMENT_NODE || rootContainerElement.nodeType === DOCUMENT_FRAGMENT_NODE;
+  //  监听永远放在根document
   var doc = isDocumentOrFragment ? rootContainerElement : rootContainerElement.ownerDocument;
+  //  稳妥起见，再次监听
   listenTo(registrationName, doc);
 }
 
+//  获取owner的document从根组件的容器中
 function getOwnerDocumentFromRootContainer(rootContainerElement) {
   return rootContainerElement.nodeType === DOCUMENT_NODE ? rootContainerElement : rootContainerElement.ownerDocument;
 }
 
 function noop() {}
 
+//  捕获非可交互元素上的点击事件
 function trapClickOnNonInteractiveElement(node) {
+  //  移动端的safari在非交互元素上不会触发冒泡点击，这意味着委托的点击事件监听器不会触发
   // Mobile Safari does not fire properly bubble click events on
   // non-interactive elements, which means delegated click listeners do not
   // fire. The workaround for this bug involves attaching an empty click
