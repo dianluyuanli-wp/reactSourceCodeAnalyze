@@ -9375,6 +9375,11 @@ function noop() {}
 //  捕获非可交互元素上的点击事件
 function trapClickOnNonInteractiveElement(node) {
   //  移动端的safari在非交互元素上不会触发冒泡点击，这意味着委托的点击事件监听器不会触发
+  //  为了避免这个问题，我们可以在目标元素上进行一次空点击监听
+  //  仅仅使用onclick属性，所以我们不用去处理订阅的逻辑，当监听器被移除的时候
+  //  我们不确定是否要清楚这两个逻辑
+  //  todo: 只为safari进行相关逻辑
+
   // Mobile Safari does not fire properly bubble click events on
   // non-interactive elements, which means delegated click listeners do not
   // fire. The workaround for this bug involves attaching an empty click
@@ -9387,43 +9392,63 @@ function trapClickOnNonInteractiveElement(node) {
   node.onclick = noop;
 }
 
+//  设置初始化的dom属性
 function setInitialDOMProperties(tag, domElement, rootContainerElement, nextProps, isCustomComponentTag) {
   for (var propKey in nextProps) {
+    //  如果不是自有属性，就继续
     if (!nextProps.hasOwnProperty(propKey)) {
       continue;
     }
+    //  取出值
     var nextProp = nextProps[propKey];
+    //  如果是style
     if (propKey === STYLE$1) {
       {
+        //  如果有nextProp
         if (nextProp) {
+          //  冻结style对象，我们可以假定他不会改变。再过去我们已经警告过了
           // Freeze the next style object so that we can assume it won't be
           // mutated. We have already warned for this in the past.
           Object.freeze(nextProp);
         }
       }
+      //  依赖updateStylesByID不会改变样式更新
       // Relies on `updateStylesByID` not mutating `styleUpdates`.
       setValueForStyles(domElement, nextProp);
+      //  如果是setInnerHtml
     } else if (propKey === DANGEROUSLY_SET_INNER_HTML) {
+      //  读取__html
       var nextHtml = nextProp ? nextProp[HTML] : undefined;
       if (nextHtml != null) {
+        //  如果非空，设置属性
         setInnerHTML(domElement, nextHtml);
       }
+      //  如果是children
     } else if (propKey === CHILDREN) {
+      //  如果是字符串
       if (typeof nextProp === 'string') {
+        //  当text为空的时候，避免设置初始的textContent。在ie11中，设置textarea标签的textContent
+        //  将会使得占位内容不会显示在textarea中，除非他再次被聚焦或者失焦。
         // Avoid setting initial textContent when the text is empty. In IE11 setting
         // textContent on a <textarea> will cause the placeholder to not
         // show within the <textarea> until it has been focused and blurred again.
         // https://github.com/facebook/react/issues/6731#issuecomment-254874553
         var canSetTextContent = tag !== 'textarea' || nextProp !== '';
         if (canSetTextContent) {
+          //  能设置的时候才改
           setTextContent(domElement, nextProp);
         }
+        //  如果是number类型，直接设置
       } else if (typeof nextProp === 'number') {
         setTextContent(domElement, '' + nextProp);
-      }
+      } //  压缩内容可编辑
     } else if (propKey === SUPPRESS_CONTENT_EDITABLE_WARNING || propKey === SUPPRESS_HYDRATION_WARNING$1) {
       // Noop
+      //  如果是自动聚焦
     } else if (propKey === AUTOFOCUS) {
+      //  我们客户端在变动提交的时候将会单独兼容这种情况，我们将要在
+      //  参数列表中排除这种情况通过添加一个特殊的例子，但是在服务器端
+      //  渲染这个逻辑将不会触发（但是我们想要在ssr中触发）
       // We polyfill it separately on the client during commit.
       // We could have excluded it in the property list instead of
       // adding a special case here, but then it wouldn't be emitted
