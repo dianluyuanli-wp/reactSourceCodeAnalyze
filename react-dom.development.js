@@ -6193,6 +6193,7 @@ function trapBubbledEvent(topLevelType, element) {
   addEventBubbleListener(element, getRawEventName(topLevelType),
   //  检查是否可交互以及是否包裹在可交互的更新中
   // Check if interactive and wrap in interactiveUpdates
+  //  它是第三个参数
   dispatch.bind(null, topLevelType));
 }
 
@@ -9456,26 +9457,34 @@ function setInitialDOMProperties(tag, domElement, rootContainerElement, nextProp
     } else if (registrationNameModules.hasOwnProperty(propKey)) {
       if (nextProp != null) {
         if (true && typeof nextProp !== 'function') {
+          //  如果不是函数，告警
           warnForInvalidEventListener(propKey, nextProp);
         }
+        //  再次注册预防万一
         ensureListeningTo(rootContainerElement, propKey);
       }
     } else if (nextProp != null) {
+      //  否则走默认数据配置
       setValueForProperty(domElement, propKey, nextProp, isCustomComponentTag);
     }
   }
 }
 
+//  更新dom属性
 function updateDOMProperties(domElement, updatePayload, wasCustomComponentTag, isCustomComponentTag) {
   // TODO: Handle wasCustomComponentTag
+  //  控制标准组件的tag
   for (var i = 0; i < updatePayload.length; i += 2) {
     var propKey = updatePayload[i];
     var propValue = updatePayload[i + 1];
     if (propKey === STYLE$1) {
+      //  如果是style,那么设置属性
       setValueForStyles(domElement, propValue);
+      //  如果是dangerhtml,设置内部的html
     } else if (propKey === DANGEROUSLY_SET_INNER_HTML) {
       setInnerHTML(domElement, propValue);
     } else if (propKey === CHILDREN) {
+      //  如果是children，更新文本内容
       setTextContent(domElement, propValue);
     } else {
       setValueForProperty(domElement, propKey, propValue, isCustomComponentTag);
@@ -9483,41 +9492,63 @@ function updateDOMProperties(domElement, updatePayload, wasCustomComponentTag, i
   }
 }
 
+//  创建元素
 function createElement(type, props, rootContainerElement, parentNamespace) {
   var isCustomComponentTag = void 0;
-
+  //  我们创建标签在他们父容器的命名空间内。html标签没有命名空间
   // We create tags in the namespace of their parent container, except HTML
   // tags get no namespace.
+
+  //  获取根容器获取自己的document
   var ownerDocument = getOwnerDocumentFromRootContainer(rootContainerElement);
   var domElement = void 0;
   var namespaceURI = parentNamespace;
   if (namespaceURI === HTML_NAMESPACE) {
+    //  获取命名空间的uri
     namespaceURI = getIntrinsicNamespace(type);
   }
+  //  如果还是html
   if (namespaceURI === HTML_NAMESPACE) {
     {
+      //  判断是否是通用组件tag
       isCustomComponentTag = isCustomComponent(type, props);
+      //  这个检查能够通过父命名空间来保证吗？我们不想允许svg和mAth标签
       // Should this check be gated by parent namespace? Not sure we want to
       // allow <SVG> or <mATH>.
+      //  如果是通用组件tag，并且不是全小写
+      //  使用不正确的大小写,请使用驼峰类型的react组件
       !(isCustomComponentTag || type === type.toLowerCase()) ? warning$1(false, '<%s /> is using incorrect casing. ' + 'Use PascalCase for React components, ' + 'or lowercase for HTML elements.', type) : void 0;
     }
 
+    //  如果是scrip标签
     if (type === 'script') {
+      //  通过innerHTML来创建script标签，从而parser-inserted标志将会是true,
+      //  他也不会执行
       // Create the script via .innerHTML so its "parser-inserted" flag is
       // set to true and it does not execute
       var div = ownerDocument.createElement('div');
       div.innerHTML = '<script><' + '/script>'; // eslint-disable-line
       // This is guaranteed to yield a script element.
+      //  确保产生一个script元素
       var firstChild = div.firstChild;
+      //  抛出来的第一个子元素作为domElement
       domElement = div.removeChild(firstChild);
     } else if (typeof props.is === 'string') {
+      //  createElement将会更新web组件
       // $FlowIssue `createElement` should be updated for Web Components
       domElement = ownerDocument.createElement(type, { is: props.is });
     } else {
+      //  通过else分开其他分支而不是使用props.is或者undefined，因为firefox下有bug
       // Separate else branch instead of using `props.is || undefined` above because of a Firefox bug.
       // See discussion in https://github.com/facebook/react/pull/6896
       // and discussion in https://bugzilla.mozilla.org/show_bug.cgi?id=1276240
       domElement = ownerDocument.createElement(type);
+      //  通常情况下属性被设置在setInitialDOMProperties中，然而multiple和size属性在select
+      //  中使用时，需要在option前被插入。
+
+      //  这个用来避免：
+      //  select不会滚动到正确的option,因为单一的select元素会自动选取第一个item
+      //  select设置第一个item尽管设置了size属性
       // Normally attributes are assigned in `setInitialDOMProperties`, however the `multiple` and `size`
       // attributes on `select`s needs to be added before `option`s are inserted.
       // This prevents:
@@ -9529,24 +9560,31 @@ function createElement(type, props, rootContainerElement, parentNamespace) {
       if (type === 'select') {
         var node = domElement;
         if (props.multiple) {
+          //  设置multiple属性
           node.multiple = true;
+          //  如果有size属性
         } else if (props.size) {
+          //  设置大于1的size就会触发select行为触发类似multiple=true,这时好像没有option被选中
           // Setting a size greater than 1 causes a select to behave like `multiple=true`, where
           // it is possible that no option is selected.
           //
+          //  这个只是在select处于single election mode的时候必要
           // This is only necessary when a select in "single selection mode".
           node.size = props.size;
         }
       }
     }
   } else {
+    //  直接创建元素
     domElement = ownerDocument.createElementNS(namespaceURI, type);
   }
 
   {
     if (namespaceURI === HTML_NAMESPACE) {
+      //  如果不是常规tag,且toString结果为[object HTMLUnknownElement]，不在未知tag列表中
       if (!isCustomComponentTag && Object.prototype.toString.call(domElement) === '[object HTMLUnknownElement]' && !Object.prototype.hasOwnProperty.call(warnedUnknownTags, type)) {
         warnedUnknownTags[type] = true;
+        //  告警：xxx标签在浏览器中不会被识别，如果你想要渲染一个react组件，请使用一个大写字母开头的名字
         warning$1(false, 'The tag <%s> is unrecognized in this browser. ' + 'If you meant to render a React component, start its name with ' + 'an uppercase letter.', type);
       }
     }
@@ -9555,30 +9593,38 @@ function createElement(type, props, rootContainerElement, parentNamespace) {
   return domElement;
 }
 
+//  创建文本节点
 function createTextNode(text, rootContainerElement) {
   return getOwnerDocumentFromRootContainer(rootContainerElement).createTextNode(text);
 }
 
+//  设置初始属性
 function setInitialProperties(domElement, tag, rawProps, rootContainerElement) {
+  //  是否是通用标签
   var isCustomComponentTag = isCustomComponent(tag, rawProps);
   {
     validatePropertiesInDevelopment(tag, rawProps);
+    //  如果是通用标签，没有告警过，有shadyRoot,告警
+    //  正在使用shadyDom, 在react中使用shady dom会导致很多巧妙的中断
     if (isCustomComponentTag && !didWarnShadyDOM && domElement.shadyRoot) {
       warning$1(false, '%s is using shady DOM. Using shady DOM with React can ' + 'cause things to break subtly.', getCurrentFiberOwnerNameInDevOrNull() || 'A component');
       didWarnShadyDOM = true;
     }
   }
 
+  //  确保我们在触发任何事件时，会检查isMounted
   // TODO: Make sure that we check isMounted before firing any of these events.
   var props = void 0;
   switch (tag) {
     case 'iframe':
     case 'object':
+      //  捕获load的冒泡事件
       trapBubbledEvent(TOP_LOAD, domElement);
       props = rawProps;
       break;
     case 'video':
     case 'audio':
+      //  媒体类型创建所有监听器
       // Create listener for each media event
       for (var i = 0; i < mediaEventTypes.length; i++) {
         trapBubbledEvent(mediaEventTypes[i], domElement);
@@ -9586,29 +9632,37 @@ function setInitialProperties(domElement, tag, rawProps, rootContainerElement) {
       props = rawProps;
       break;
     case 'source':
+      //  捕获error监听器
       trapBubbledEvent(TOP_ERROR, domElement);
       props = rawProps;
       break;
     case 'img':
     case 'image':
     case 'link':
+      //  捕获load和error事件
       trapBubbledEvent(TOP_ERROR, domElement);
       trapBubbledEvent(TOP_LOAD, domElement);
       props = rawProps;
       break;
     case 'form':
+      //  form捕获reset和submit事件
       trapBubbledEvent(TOP_RESET, domElement);
       trapBubbledEvent(TOP_SUBMIT, domElement);
       props = rawProps;
       break;
     case 'details':
+      //  toggle事件捕获冒泡
       trapBubbledEvent(TOP_TOGGLE, domElement);
       props = rawProps;
       break;
     case 'input':
+      //  初始包裹状态
       initWrapperState(domElement, rawProps);
+      //  获取host属性
       props = getHostProps(domElement, rawProps);
+      //  捕获冒泡事件
       trapBubbledEvent(TOP_INVALID, domElement);
+      //  为了控制组件，我们需要确认我们监听了事件，以防这里没有监听器
       // For controlled components we always need to ensure we're listening
       // to onChange. Even if there is no listener.
       ensureListeningTo(rootContainerElement, 'onChange');
