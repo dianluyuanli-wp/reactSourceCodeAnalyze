@@ -6188,12 +6188,13 @@ function trapBubbledEvent(topLevelType, element) {
   if (!element) {
     return null;
   }
+  //  公共的触发函数
   var dispatch = isInteractiveTopLevelEventType(topLevelType) ? dispatchInteractiveEvent : dispatchEvent;
   //  添加绑定
   addEventBubbleListener(element, getRawEventName(topLevelType),
   //  检查是否可交互以及是否包裹在可交互的更新中
   // Check if interactive and wrap in interactiveUpdates
-  //  它是第三个参数
+  //  它是第三个参数，绑定顶层参数
   dispatch.bind(null, topLevelType));
 }
 
@@ -6225,6 +6226,7 @@ function dispatchInteractiveEvent(topLevelType, nativeEvent) {
   interactiveUpdates(dispatchEvent, topLevelType, nativeEvent);
 }
 
+//  这个是onListen的回调
 function dispatchEvent(topLevelType, nativeEvent) {
   if (!_enabled) {
     return;
@@ -9668,21 +9670,29 @@ function setInitialProperties(domElement, tag, rawProps, rootContainerElement) {
       ensureListeningTo(rootContainerElement, 'onChange');
       break;
     case 'option':
+      //  验证属性
       validateProps(domElement, rawProps);
       props = getHostProps$1(domElement, rawProps);
       break;
     case 'select':
+      //  初始包裹状态
       initWrapperState$1(domElement, rawProps);
+      //  value置空
       props = getHostProps$2(domElement, rawProps);
+      //  捕获invalid事件
       trapBubbledEvent(TOP_INVALID, domElement);
+      //  针对受控组件，我们通常需要确保我们在监听变化，即使这里没有监听器
       // For controlled components we always need to ensure we're listening
       // to onChange. Even if there is no listener.
       ensureListeningTo(rootContainerElement, 'onChange');
       break;
     case 'textarea':
+      //  初始化包裹体
       initWrapperState$2(domElement, rawProps);
       props = getHostProps$3(domElement, rawProps);
+      //  捕获invalid事件
       trapBubbledEvent(TOP_INVALID, domElement);
+      //  针对受控组件，我们通常需要确保我们在监听变化，即使这里没有监听器
       // For controlled components we always need to ensure we're listening
       // to onChange. Even if there is no listener.
       ensureListeningTo(rootContainerElement, 'onChange');
@@ -9690,9 +9700,9 @@ function setInitialProperties(domElement, tag, rawProps, rootContainerElement) {
     default:
       props = rawProps;
   }
-
+  //  断言可用属性
   assertValidProps(tag, props);
-
+  //  设置初始dom属性
   setInitialDOMProperties(tag, domElement, rootContainerElement, props, isCustomComponentTag);
 
   switch (tag) {
