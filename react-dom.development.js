@@ -2919,6 +2919,7 @@ function getValueFromNode(node) {
 }
 
 //  追踪节点上的值
+//  通过get和set行为的劫持来实现
 function trackValueOnNode(node) {
   //  判断值的属性是checked还是value
   var valueField = isCheckable(node) ? 'checked' : 'value';
@@ -9707,12 +9708,14 @@ function setInitialProperties(domElement, tag, rawProps, rootContainerElement) {
 
   switch (tag) {
     case 'input':
+      //  确保是否已经卸载做一些必要的清理操作，因为我们不会停止追踪
       // TODO: Make sure we check if this is still unmounted or do any clean
       // up necessary since we never stop tracking anymore.
       track(domElement);
       postMountWrapper(domElement, rawProps, false);
       break;
     case 'textarea':
+      //  textarea也是一样的逻辑
       // TODO: Make sure we check if this is still unmounted or do any clean
       // up necessary since we never stop tracking anymore.
       track(domElement);
@@ -9726,6 +9729,7 @@ function setInitialProperties(domElement, tag, rawProps, rootContainerElement) {
       break;
     default:
       if (typeof props.onClick === 'function') {
+        //  这个可能不会被svg,mathMl和通用元素识别
         // TODO: This cast may not be sound for SVG, MathML or custom elements.
         trapClickOnNonInteractiveElement(domElement);
       }
@@ -9733,9 +9737,11 @@ function setInitialProperties(domElement, tag, rawProps, rootContainerElement) {
   }
 }
 
+//  计算两个对象之间的差异
 // Calculate the diff between the two objects.
 function diffProperties(domElement, tag, lastRawProps, nextRawProps, rootContainerElement) {
   {
+    //  开发环境验证属性
     validatePropertiesInDevelopment(tag, nextRawProps);
   }
 
@@ -9745,11 +9751,13 @@ function diffProperties(domElement, tag, lastRawProps, nextRawProps, rootContain
   var nextProps = void 0;
   switch (tag) {
     case 'input':
+      //  value啥的都给搞成空值了，其他不动
       lastProps = getHostProps(domElement, lastRawProps);
       nextProps = getHostProps(domElement, nextRawProps);
       updatePayload = [];
       break;
     case 'option':
+      //  类似上面的逻辑
       lastProps = getHostProps$1(domElement, lastRawProps);
       nextProps = getHostProps$1(domElement, nextRawProps);
       updatePayload = [];
@@ -9769,20 +9777,25 @@ function diffProperties(domElement, tag, lastRawProps, nextRawProps, rootContain
       nextProps = nextRawProps;
       if (typeof lastProps.onClick !== 'function' && typeof nextProps.onClick === 'function') {
         // TODO: This cast may not be sound for SVG, MathML or custom elements.
+        //  替换成noop函数
         trapClickOnNonInteractiveElement(domElement);
       }
       break;
   }
 
+  //  校验属性
   assertValidProps(tag, nextProps);
 
   var propKey = void 0;
   var styleName = void 0;
   var styleUpdates = null;
+  //  处理当前的porps
   for (propKey in lastProps) {
+    //  如果未来也有这个属性，或者不是last的自有属性，或者last的值为空，直接跳过
     if (nextProps.hasOwnProperty(propKey) || !lastProps.hasOwnProperty(propKey) || lastProps[propKey] == null) {
       continue;
     }
+    //  如果是style
     if (propKey === STYLE$1) {
       var lastStyle = lastProps[propKey];
       for (styleName in lastStyle) {
@@ -9790,43 +9803,56 @@ function diffProperties(domElement, tag, lastRawProps, nextRawProps, rootContain
           if (!styleUpdates) {
             styleUpdates = {};
           }
+          //  给每一个属性置空串
           styleUpdates[styleName] = '';
         }
       }
+      //  啥也不用干，因为text清空机制会处理
     } else if (propKey === DANGEROUSLY_SET_INNER_HTML || propKey === CHILDREN) {
       // Noop. This is handled by the clear text mechanism.
     } else if (propKey === SUPPRESS_CONTENT_EDITABLE_WARNING || propKey === SUPPRESS_HYDRATION_WARNING$1) {
       // Noop
     } else if (propKey === AUTOFOCUS) {
       // Noop. It doesn't work on updates anyway.
+      //  如果是登记map中的具名的属性
     } else if (registrationNameModules.hasOwnProperty(propKey)) {
+      //  这是一个特殊的case，如果监听器更新，我们需要确保当前的fiber指针
+      //  也更新过了，从而我们可以去触发这个元素的更新
       // This is a special case. If any listener updates we need to ensure
       // that the "current" fiber pointer gets updated so we need a commit
       // to update this element.
       if (!updatePayload) {
+        //  跟新payload置空
         updatePayload = [];
       }
     } else {
+      //  为了其他所有的删除属性，我们将其添加在数组中，我们在更新提交的阶段启用白名单
       // For all other deleted properties we add it to the queue. We use
       // the whitelist in the commit phase instead.
       (updatePayload = updatePayload || []).push(propKey, null);
     }
   }
+  //  处理nextProps中的每一个key
   for (propKey in nextProps) {
     var nextProp = nextProps[propKey];
+    //  找出lastProp
     var lastProp = lastProps != null ? lastProps[propKey] : undefined;
+    //  该属性被删除，该属性不变
     if (!nextProps.hasOwnProperty(propKey) || nextProp === lastProp || nextProp == null && lastProp == null) {
       continue;
     }
+    //  如果是style
     if (propKey === STYLE$1) {
       {
         if (nextProp) {
+          //  冻结未来的样式对象，从而我们能够假定它不会改变。在过去我们会有告警
           // Freeze the next style object so that we can assume it won't be
           // mutated. We have already warned for this in the past.
           Object.freeze(nextProp);
         }
       }
       if (lastProp) {
+        //  对lastProp重置styles
         // Unset styles on `lastProp` but not on `nextProp`.
         for (styleName in lastProp) {
           if (lastProp.hasOwnProperty(styleName) && (!nextProp || !nextProp.hasOwnProperty(styleName))) {
@@ -9836,8 +9862,10 @@ function diffProperties(domElement, tag, lastRawProps, nextRawProps, rootContain
             styleUpdates[styleName] = '';
           }
         }
+        //  更新从lastProp开始变化的样式
         // Update styles that changed since `lastProp`.
         for (styleName in nextProp) {
+          //  如果是自有属性且二者不相等
           if (nextProp.hasOwnProperty(styleName) && lastProp[styleName] !== nextProp[styleName]) {
             if (!styleUpdates) {
               styleUpdates = {};
@@ -9845,21 +9873,26 @@ function diffProperties(domElement, tag, lastRawProps, nextRawProps, rootContain
             styleUpdates[styleName] = nextProp[styleName];
           }
         }
+        //  如果没有lastProp
       } else {
+        //  依赖updateStylesByID，不会改变styleUpdates
         // Relies on `updateStylesByID` not mutating `styleUpdates`.
         if (!styleUpdates) {
           if (!updatePayload) {
             updatePayload = [];
           }
+          //  更新负载
           updatePayload.push(propKey, styleUpdates);
         }
         styleUpdates = nextProp;
       }
+      //  如果是dangerInnerHtml
     } else if (propKey === DANGEROUSLY_SET_INNER_HTML) {
       var nextHtml = nextProp ? nextProp[HTML] : undefined;
       var lastHtml = lastProp ? lastProp[HTML] : undefined;
       if (nextHtml != null) {
         if (lastHtml !== nextHtml) {
+          //  更新负载数组，已件值对的形式
           (updatePayload = updatePayload || []).push(propKey, '' + nextHtml);
         }
       } else {
