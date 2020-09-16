@@ -9737,7 +9737,7 @@ function setInitialProperties(domElement, tag, rawProps, rootContainerElement) {
   }
 }
 
-//  计算两个对象之间的差异
+//  计算两个对象之间的差异，返回一个更新队列
 // Calculate the diff between the two objects.
 function diffProperties(domElement, tag, lastRawProps, nextRawProps, rootContainerElement) {
   {
@@ -9775,6 +9775,7 @@ function diffProperties(domElement, tag, lastRawProps, nextRawProps, rootContain
     default:
       lastProps = lastRawProps;
       nextProps = nextRawProps;
+      //  如果未来是函数，当前不是函数，那么给当前注入一个noop函数
       if (typeof lastProps.onClick !== 'function' && typeof nextProps.onClick === 'function') {
         // TODO: This cast may not be sound for SVG, MathML or custom elements.
         //  替换成noop函数
@@ -9814,7 +9815,7 @@ function diffProperties(domElement, tag, lastRawProps, nextRawProps, rootContain
       // Noop
     } else if (propKey === AUTOFOCUS) {
       // Noop. It doesn't work on updates anyway.
-      //  如果是登记map中的具名的属性
+      //  如果是登记map中的具名的属性，是一个事件名字和模块的映射
     } else if (registrationNameModules.hasOwnProperty(propKey)) {
       //  这是一个特殊的case，如果监听器更新，我们需要确保当前的fiber指针
       //  也更新过了，从而我们可以去触发这个元素的更新
@@ -9892,62 +9893,85 @@ function diffProperties(domElement, tag, lastRawProps, nextRawProps, rootContain
       var lastHtml = lastProp ? lastProp[HTML] : undefined;
       if (nextHtml != null) {
         if (lastHtml !== nextHtml) {
-          //  更新负载数组，已件值对的形式
+          //  更新负载数组，以键值对的形式
           (updatePayload = updatePayload || []).push(propKey, '' + nextHtml);
         }
       } else {
+        //  todo: 如果我们在子元素已经插入的时候在去清楚可能太晚了
         // TODO: It might be too late to clear this if we have children
         // inserted already.
       }
+      //  如果更新的是children
     } else if (propKey === CHILDREN) {
+      //  如果当前和未来不一样, 且为简单类型
       if (lastProp !== nextProp && (typeof nextProp === 'string' || typeof nextProp === 'number')) {
+        //  推入键值对
         (updatePayload = updatePayload || []).push(propKey, '' + nextProp);
       }
     } else if (propKey === SUPPRESS_CONTENT_EDITABLE_WARNING || propKey === SUPPRESS_HYDRATION_WARNING$1) {
       // Noop
+      //  如果已登记的属性
     } else if (registrationNameModules.hasOwnProperty(propKey)) {
       if (nextProp != null) {
+        //  我们已经监听了，尽管并没有改变
         // We eagerly listen to this even though we haven't committed yet.
         if (true && typeof nextProp !== 'function') {
           warnForInvalidEventListener(propKey, nextProp);
         }
+        //  确保再次监听
         ensureListeningTo(rootContainerElement, propKey);
       }
       if (!updatePayload && lastProp !== nextProp) {
+        //  这个是特殊case,如果任意监听器更新了，我们需要确保当前的舒心指针
+        //  也更新了，所以我们可以同步元素的改变
+
         // This is a special case. If any listener updates we need to ensure
         // that the "current" props pointer gets updated so we need a commit
         // to update this element.
         updatePayload = [];
       }
     } else {
+      //  对于很多其他属性，我们总是要将其添加到队列里，之后我们才可以
+      //  过滤掉，并且启用白名单的机制
+
       // For any other property we always add it to the queue and then we
       // filter it out using the whitelist during the commit.
       (updatePayload = updatePayload || []).push(propKey, nextProp);
     }
   }
+  //  如果有样式的改动
   if (styleUpdates) {
     {
+      //  验证属性
       validateShorthandPropertyCollisionInDev(styleUpdates, nextProps[STYLE$1]);
     }
+    //  更新队列
     (updatePayload = updatePayload || []).push(STYLE$1, styleUpdates);
   }
   return updatePayload;
 }
 
+//  应用更新
 // Apply the diff.
 function updateProperties(domElement, updatePayload, tag, lastRawProps, nextRawProps) {
+  //  更新时校验以前的名字
+  //  在一个更新过程中，很有可能会有多次校验
+  //  当有一个radio尝试去改变名字的时候，浏览器会让另外一个radiao为false
+
   // Update checked *before* name.
   // In the middle of an update, it is possible to have multiple checked.
   // When a checked radio tries to change name, browser makes another radio's checked false.
   if (tag === 'input' && nextRawProps.type === 'radio' && nextRawProps.name != null) {
     updateChecked(domElement, nextRawProps);
   }
-
+  //  过去是否是标准组件tag
   var wasCustomComponentTag = isCustomComponent(tag, lastRawProps);
+  //  未来是否是标准组件
   var isCustomComponentTag = isCustomComponent(tag, nextRawProps);
   // Apply the diff.
   updateDOMProperties(domElement, updatePayload, wasCustomComponentTag, isCustomComponentTag);
 
+  //  tode:确保一个更新被正确排期，如果任意一个特殊属性改变了
   // TODO: Ensure that an update gets scheduled if any of the special props
   // changed.
   switch (tag) {
@@ -9968,6 +9992,7 @@ function updateProperties(domElement, updatePayload, tag, lastRawProps, nextRawP
   }
 }
 
+//  获取可能的标准名
 function getPossibleStandardName(propName) {
   {
     var lowerCasedName = propName.toLowerCase();
@@ -9979,6 +10004,7 @@ function getPossibleStandardName(propName) {
   return null;
 }
 
+//  对比水合属性
 function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, rootContainerElement) {
   var isCustomComponentTag = void 0;
   var extraAttributeNames = void 0;
@@ -9986,21 +10012,26 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
   {
     suppressHydrationWarning = rawProps[SUPPRESS_HYDRATION_WARNING$1] === true;
     isCustomComponentTag = isCustomComponent(tag, rawProps);
+    //  校验属性
     validatePropertiesInDevelopment(tag, rawProps);
     if (isCustomComponentTag && !didWarnShadyDOM && domElement.shadyRoot) {
+      //  xx正在使用shadyDom,shadyDom和react混用会产生一些奇怪的问题
       warning$1(false, '%s is using shady DOM. Using shady DOM with React can ' + 'cause things to break subtly.', getCurrentFiberOwnerNameInDevOrNull() || 'A component');
       didWarnShadyDOM = true;
     }
   }
 
+  //  todo: 确保我们在触发这些事件之前检查了组件是否挂载
   // TODO: Make sure that we check isMounted before firing any of these events.
   switch (tag) {
     case 'iframe':
     case 'object':
+      //  捕获load事件
       trapBubbledEvent(TOP_LOAD, domElement);
       break;
     case 'video':
     case 'audio':
+      //  媒体事件类型的每一个都要捕获
       // Create listener for each media event
       for (var i = 0; i < mediaEventTypes.length; i++) {
         trapBubbledEvent(mediaEventTypes[i], domElement);
@@ -10012,10 +10043,12 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
     case 'img':
     case 'image':
     case 'link':
+      //  捕获error和load事件
       trapBubbledEvent(TOP_ERROR, domElement);
       trapBubbledEvent(TOP_LOAD, domElement);
       break;
     case 'form':
+      //  捕获reset和submit事件
       trapBubbledEvent(TOP_RESET, domElement);
       trapBubbledEvent(TOP_SUBMIT, domElement);
       break;
@@ -10023,8 +10056,10 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
       trapBubbledEvent(TOP_TOGGLE, domElement);
       break;
     case 'input':
+      //  初始化包裹态
       initWrapperState(domElement, rawProps);
       trapBubbledEvent(TOP_INVALID, domElement);
+      //  为了控制组件，我们需要确保我们始终在监听变化，尽管可能并没有监听器函数
       // For controlled components we always need to ensure we're listening
       // to onChange. Even if there is no listener.
       ensureListeningTo(rootContainerElement, 'onChange');
@@ -10033,6 +10068,7 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
       validateProps(domElement, rawProps);
       break;
     case 'select':
+      //  捕获invalid事件
       initWrapperState$1(domElement, rawProps);
       trapBubbledEvent(TOP_INVALID, domElement);
       // For controlled components we always need to ensure we're listening
@@ -10047,18 +10083,21 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
       ensureListeningTo(rootContainerElement, 'onChange');
       break;
   }
-
+  //  校验属性
   assertValidProps(tag, rawProps);
 
   {
+    //  额外的属性名
     extraAttributeNames = new Set();
     var attributes = domElement.attributes;
     for (var _i = 0; _i < attributes.length; _i++) {
       var name = attributes[_i].name.toLowerCase();
       switch (name) {
+        //  嵌入的ssr属性是在白名单中的
         // Built-in SSR attribute is whitelisted
         case 'data-reactroot':
           break;
+        //  受控属性不会校验
         // Controlled attributes are not validated
         // TODO: Only ignore them on controlled tags.
         case 'value':
@@ -10068,8 +10107,11 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
         case 'selected':
           break;
         default:
+          //  尝试去使用原始的名字
+
           // Intentionally use the original name.
           // See discussion in https://github.com/facebook/react/pull/10676.
+          //  其他属性添加到map中
           extraAttributeNames.add(attributes[_i].name);
       }
     }
@@ -10077,11 +10119,19 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
 
   var updatePayload = null;
   for (var propKey in rawProps) {
+    //  不是自有属性直接跳过
     if (!rawProps.hasOwnProperty(propKey)) {
       continue;
     }
     var nextProp = rawProps[propKey];
     if (propKey === CHILDREN) {
+      //  对于文本内容子级，我们将其与textContent进行比较。这可能与使用textContent读取时隐藏的其他HTML相匹配
+      //  例如foo将会匹配f<span>oo</span>但是也满足我们的需求。我们的需求不是产生
+      //  完美的html和属性。
+      //  理想情况下，我们应该保留结构，但如果可见内容仍然足以指示这些节点可能连接到的侦听器，则可以不这样做
+
+      //  todo: 如果有多余一个的文本节点子元素
+      //  todo: 我们应该使用domElement.firstChild.nodeValue来比较吗？
       // For text content children we compare against textContent. This
       // might match additional HTML that is hidden when we read it using
       // textContent. E.g. "foo" will match "f<span>oo</span>" but that still
