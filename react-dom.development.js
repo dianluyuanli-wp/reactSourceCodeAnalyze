@@ -10144,6 +10144,7 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
       if (typeof nextProp === 'string') {
         if (domElement.textContent !== nextProp) {
           if (true && !suppressHydrationWarning) {
+            //  前端和服务端渲染不一致告警
             warnForTextDifference(domElement.textContent, nextProp);
           }
           updatePayload = [CHILDREN, nextProp];
@@ -10156,33 +10157,41 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
           updatePayload = [CHILDREN, '' + nextProp];
         }
       }
+      //  如果是登记名映射的函数
     } else if (registrationNameModules.hasOwnProperty(propKey)) {
       if (nextProp != null) {
         if (true && typeof nextProp !== 'function') {
           warnForInvalidEventListener(propKey, nextProp);
         }
+        //  确保监听上了
         ensureListeningTo(rootContainerElement, propKey);
       }
     } else if (true &&
+      //  确保我们能够计算（这是一个仅在开发环境可用的方法）
     // Convince Flow we've calculated it (it's DEV-only in this method.)
     typeof isCustomComponentTag === 'boolean') {
+      //  验证这个属性是否是期望的值
       // Validate that the properties correspond to their expected values.
       var serverValue = void 0;
       var propertyInfo = getPropertyInfo(propKey);
       if (suppressHydrationWarning) {
+        //  不用费心比较了。我们将会忽略掉所有的差异
         // Don't bother comparing. We're ignoring all these warnings.
       } else if (propKey === SUPPRESS_CONTENT_EDITABLE_WARNING || propKey === SUPPRESS_HYDRATION_WARNING$1 ||
-      // Controlled attributes are not validated
+        //  受控属性是不可校验的
+        // Controlled attributes are not validated
       // TODO: Only ignore them on controlled tags.
       propKey === 'value' || propKey === 'checked' || propKey === 'selected') {
         // Noop
       } else if (propKey === DANGEROUSLY_SET_INNER_HTML) {
         var serverHTML = domElement.innerHTML;
         var nextHtml = nextProp ? nextProp[HTML] : undefined;
+        //  获取期望的html
         var expectedHTML = normalizeHTML(domElement, nextHtml != null ? nextHtml : '');
         if (expectedHTML !== serverHTML) {
           warnForPropDifference(propKey, serverHTML, expectedHTML);
         }
+        //  如果是style
       } else if (propKey === STYLE$1) {
         // $FlowFixMe - Should be inferred as not undefined.
         extraAttributeNames.delete(propKey);
