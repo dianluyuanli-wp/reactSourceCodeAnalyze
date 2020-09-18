@@ -4179,6 +4179,7 @@ function updateWrapper(element, props) {
   }
 }
 
+//  修改node的value,还有一些hack操作
 function postMountWrapper(element, props, isHydrating) {
   var node = element;
   //  如果值已经被设置，不要再赋值了，这样可以避免用户在text-input中
@@ -4275,12 +4276,14 @@ function postMountWrapper(element, props, isHydrating) {
   //  (甚至在detachment之后也会发生)
 
   //  详见https://bugs.chromium.org/p/chromium/issues/detail?id=608416
-  //  我们需要暂时重置name一面干扰radio button组
+  //  我们需要暂时重置name以免干扰radio button组
   // Normally, we'd just do `node.checked = node.checked` upon initial mount, less this bug
   // this is needed to work around a chrome bug where setting defaultChecked
   // will sometimes influence the value of checked (even after detachment).
   // Reference: https://bugs.chromium.org/p/chromium/issues/detail?id=608416
   // We need to temporarily unset name to avoid disrupting radio button groups.
+  
+  //  重置name的hack操作
   var name = node.name;
   if (name !== '') {
     node.name = '';
@@ -8288,7 +8291,7 @@ function assertValidProps(tag, props) {
   !(props.style == null || typeof props.style === 'object') ? invariant(false, 'The `style` prop expects a mapping from style properties to values, not a string. For example, style={{marginRight: spacing + \'em\'}} when using JSX.%s', ReactDebugCurrentFrame$2.getStackAddendum()) : void 0;
 }
 
-//  是常规组件
+//  是常规组件,区分一些奇葩标签
 function isCustomComponent(tagName, props) {
   if (tagName.indexOf('-') === -1) {
     return typeof props.is === 'string';
@@ -10005,6 +10008,7 @@ function getPossibleStandardName(propName) {
 }
 
 //  对比水合属性
+//  干了几件事：1、属性校验shadyDom, 2、捕获事件 3、更新payload 4、前后端渲染不一致告警
 function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, rootContainerElement) {
   var isCustomComponentTag = void 0;
   var extraAttributeNames = void 0;
@@ -10088,6 +10092,7 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
 
   {
     //  额外的属性名
+    //  提取所有的属性名，去重
     extraAttributeNames = new Set();
     var attributes = domElement.attributes;
     for (var _i = 0; _i < attributes.length; _i++) {
@@ -10117,6 +10122,7 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
     }
   }
 
+  //  校验各种属性，判断是否前后端渲染不一致
   var updatePayload = null;
   for (var propKey in rawProps) {
     //  不是自有属性直接跳过
@@ -10124,6 +10130,7 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
       continue;
     }
     var nextProp = rawProps[propKey];
+    //  如果是children，更新payload
     if (propKey === CHILDREN) {
       //  对于文本内容子级，我们将其与textContent进行比较。这可能与使用textContent读取时隐藏的其他HTML相匹配
       //  例如foo将会匹配f<span>oo</span>但是也满足我们的需求。我们的需求不是产生
@@ -10166,6 +10173,7 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
         //  确保监听上了
         ensureListeningTo(rootContainerElement, propKey);
       }
+      //  前后端渲染不一致的告警
     } else if (true &&
       //  确保我们能够计算（这是一个仅在开发环境可用的方法）
     // Convince Flow we've calculated it (it's DEV-only in this method.)
@@ -10193,28 +10201,34 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
         }
         //  如果是style
       } else if (propKey === STYLE$1) {
+        //  需要确认其不为undefined
         // $FlowFixMe - Should be inferred as not undefined.
         extraAttributeNames.delete(propKey);
 
         if (canDiffStyleForHydrationWarning) {
+          //  创建序列化后的字符串
           var expectedStyle = createDangerousStringForStyles(nextProp);
           serverValue = domElement.getAttribute('style');
+          //  比较server端和本地的样式是否一致，否则报错
           if (expectedStyle !== serverValue) {
             warnForPropDifference(propKey, serverValue, expectedStyle);
           }
         }
       } else if (isCustomComponentTag) {
         // $FlowFixMe - Should be inferred as not undefined.
+        //  移除属性
         extraAttributeNames.delete(propKey.toLowerCase());
         serverValue = getValueForAttribute(domElement, propKey, nextProp);
-
+        //  如果二者不一样，报错
         if (nextProp !== serverValue) {
           warnForPropDifference(propKey, serverValue, nextProp);
         }
+        //  是否应该忽略或者移除属性
       } else if (!shouldIgnoreAttribute(propKey, propertyInfo, isCustomComponentTag) && !shouldRemoveAttribute(propKey, nextProp, propertyInfo, isCustomComponentTag)) {
         var isMismatchDueToBadCasing = false;
         if (propertyInfo !== null) {
           // $FlowFixMe - Should be inferred as not undefined.
+          //  删除属性
           extraAttributeNames.delete(propertyInfo.attributeName);
           serverValue = getValueForProperty(domElement, propKey, nextProp, propertyInfo);
         } else {
@@ -10226,23 +10240,33 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
             // $FlowFixMe - Should be inferred as not undefined.
             extraAttributeNames.delete(propKey.toLowerCase());
           } else {
+            //  获取可能的标准名
             var standardName = getPossibleStandardName(propKey);
             if (standardName !== null && standardName !== propKey) {
+              //  如果svg属性支持遇到了badCase，它将会被html成功解析，
+              //  但是这将会产生一个错误匹配（在客户端可能导致用户端错误渲染）
+              //  我们在其他地方已经对这种badCase进行过告警了。所有我们将会跳过
+              //  会带来误导的错误匹配warning
+
               // If an SVG prop is supplied with bad casing, it will
               // be successfully parsed from HTML, but will produce a mismatch
               // (and would be incorrectly rendered on the client).
               // However, we already warn about bad casing elsewhere.
               // So we'll skip the misleading extra mismatch warning in this case.
+
+              //  由于badCase导致的错误匹配
               isMismatchDueToBadCasing = true;
               // $FlowFixMe - Should be inferred as not undefined.
               extraAttributeNames.delete(standardName);
             }
+            //  proKey也要删掉
             // $FlowFixMe - Should be inferred as not undefined.
             extraAttributeNames.delete(propKey);
           }
+          //  最后获取server的值
           serverValue = getValueForAttribute(domElement, propKey, nextProp);
         }
-
+        //  如果不一致且不是svg导致的badCase，发出warning
         if (nextProp !== serverValue && !isMismatchDueToBadCasing) {
           warnForPropDifference(propKey, serverValue, nextProp);
         }
@@ -10252,6 +10276,7 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
 
   {
     // $FlowFixMe - Should be inferred as not undefined.
+    //  如果还有提取的属性并且没有报过错
     if (extraAttributeNames.size > 0 && !suppressHydrationWarning) {
       // $FlowFixMe - Should be inferred as not undefined.
       warnForExtraAttributes(extraAttributeNames);
@@ -10260,9 +10285,12 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
 
   switch (tag) {
     case 'input':
+      //  todo: 确保我们检查过组件是否已经挂载，或者只在需要的时候进行清理
+      //  因为我们不会停止追踪
       // TODO: Make sure we check if this is still unmounted or do any clean
       // up necessary since we never stop tracking anymore.
       track(domElement);
+      //  更新node的值
       postMountWrapper(domElement, rawProps, true);
       break;
     case 'textarea':
@@ -10286,10 +10314,11 @@ function diffHydratedProperties(domElement, tag, rawProps, parentNamespace, root
       }
       break;
   }
-
+  //  返回更新的upadetPayLoad
   return updatePayload;
 }
 
+//  前后端渲染内容比较
 function diffHydratedText(textNode, text) {
   var isDifferent = textNode.nodeValue !== text;
   return isDifferent;
@@ -10301,22 +10330,26 @@ function warnForUnmatchedText(textNode, text) {
   }
 }
 
+//  警告删除的水和元素
 function warnForDeletedHydratableElement(parentNode, child) {
   {
     if (didWarnInvalidHydration) {
       return;
     }
     didWarnInvalidHydration = true;
+    //  在后端渲染的html中不希望某子元素出现在父元素节点中
     warningWithoutStack$1(false, 'Did not expect server HTML to contain a <%s> in <%s>.', child.nodeName.toLowerCase(), parentNode.nodeName.toLowerCase());
   }
 }
 
+//  告警：水合文本的删除
 function warnForDeletedHydratableText(parentNode, child) {
   {
     if (didWarnInvalidHydration) {
       return;
     }
     didWarnInvalidHydration = true;
+    //  并不期望在server端html中文本节点xxx出现在标签yyy中
     warningWithoutStack$1(false, 'Did not expect server HTML to contain the text node "%s" in <%s>.', child.nodeValue, parentNode.nodeName.toLowerCase());
   }
 }
