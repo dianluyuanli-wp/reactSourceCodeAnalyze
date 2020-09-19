@@ -4330,6 +4330,7 @@ function postMountWrapper(element, props, isHydrating) {
 }
 
 //  储存受控状态
+//  本质上是更新value
 function restoreControlledState(element, props) {
   var node = element;
   updateWrapper(node, props);
@@ -4338,6 +4339,7 @@ function restoreControlledState(element, props) {
 //  更新命名的表兄弟组件
 function updateNamedCousins(rootNode, props) {
   var name = props.name;
+  //  如果是radio还要更新所有的兄弟节点
   if (props.type === 'radio' && name != null) {
     var queryRoot = rootNode;
     //  找到真正的根节点
@@ -7464,6 +7466,7 @@ function postUpdateWrapper(element, props) {
 }
 
 //  存储控制态
+//  转么给select用的，更新options
 function restoreControlledState$2(element, props) {
   var node = element;
   var value = props.value;
@@ -7578,6 +7581,7 @@ function initWrapperState$2(element, props) {
 }
 
 //  更新wrapper
+//  给textArea更新值的方法
 function updateWrapper$1(element, props) {
   var node = element;
   var value = getToStringValue(props.value);
@@ -10354,19 +10358,24 @@ function warnForDeletedHydratableText(parentNode, child) {
   }
 }
 
+//  插入混合元素告警
 function warnForInsertedHydratedElement(parentNode, tag, props) {
   {
     if (didWarnInvalidHydration) {
       return;
     }
     didWarnInvalidHydration = true;
+    //  期待在服务器返回的html中有<tag> 在<xxx>中
     warningWithoutStack$1(false, 'Expected server HTML to contain a matching <%s> in <%s>.', tag, parentNode.nodeName.toLowerCase());
   }
 }
 
+//  告警: 插入了特殊的文本
 function warnForInsertedHydratedText(parentNode, text) {
   {
     if (text === '') {
+      //  我们期待去插入空的文本节点，因为他们在html中不会被展示
+      //  todo: 移除这个特殊的case，如果我们只是为了移除空的文本节点
       // We expect to insert empty text nodes since they're not represented in
       // the HTML.
       // TODO: Remove this special case if we can just avoid inserting empty
@@ -10377,10 +10386,13 @@ function warnForInsertedHydratedText(parentNode, text) {
       return;
     }
     didWarnInvalidHydration = true;
+    //  期望在server返回的html中有匹配的文本节点，xxx在yyy中
     warningWithoutStack$1(false, 'Expected server HTML to contain a matching text node for "%s" in <%s>.', text, parentNode.nodeName.toLowerCase());
   }
 }
 
+//  储存受控状态
+//  本质是更新值
 function restoreControlledState$1(domElement, tag, props) {
   switch (tag) {
     case 'input':
@@ -10400,9 +10412,16 @@ var validateDOMNesting = function () {};
 var updatedAncestorInfo = function () {};
 
 {
+  //  如下的校验代码基于html5的规则
   // This validation code was written based on the HTML5 parsing spec:
   // https://html.spec.whatwg.org/multipage/syntax.html#has-an-element-in-scope
   //
+
+  //  注意，这里将会匹配所有不可用的嵌套，或者尝试去做（因为它并不清晰，这样做提供直接的好处）
+  //  相反，我们只会在一种情况下告警：解析出来的dom树和react期望的dom树不一致
+  //  例如<b><div></div></b>是可用的，但是我们不会告警，因为它依然会被成功解析。我们
+  //  警告其他的bug，比如嵌套的<p>标签在第二个元素的开始，直接关闭的第一个标签，令人疑惑
+
   // Note: this does not catch all invalid nesting, nor does it try to (as it's
   // not clear what practical benefit doing so provides); instead, we warn only
   // for cases where the parser will give a parse tree differing from what React
@@ -10428,6 +10447,7 @@ var updatedAncestorInfo = function () {};
   // https://html.spec.whatwg.org/multipage/syntax.html#generate-implied-end-tags
   var impliedEndTags = ['dd', 'dt', 'li', 'option', 'optgroup', 'p', 'rp', 'rt'];
 
+  //  空的祖先信息
   var emptyAncestorInfo = {
     current: null,
 
@@ -10441,21 +10461,25 @@ var updatedAncestorInfo = function () {};
     dlItemTagAutoclosing: null
   };
 
+  //  更新祖先信息
   updatedAncestorInfo = function (oldInfo, tag) {
     var ancestorInfo = _assign({}, oldInfo || emptyAncestorInfo);
     var info = { tag: tag };
 
+    //  域内标签
     if (inScopeTags.indexOf(tag) !== -1) {
       ancestorInfo.aTagInScope = null;
       ancestorInfo.buttonTagInScope = null;
       ancestorInfo.nobrTagInScope = null;
     }
+    //  摁钮域标签
     if (buttonScopeTags.indexOf(tag) !== -1) {
       ancestorInfo.pTagInButtonScope = null;
     }
 
     // See rules for 'li', 'dd', 'dt' start tags in
     // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-inbody
+    //  可以看看li,dd,dt的特殊标签
     if (specialTags.indexOf(tag) !== -1 && tag !== 'address' && tag !== 'div' && tag !== 'p') {
       ancestorInfo.listItemTagAutoclosing = null;
       ancestorInfo.dlItemTagAutoclosing = null;
@@ -10463,6 +10487,7 @@ var updatedAncestorInfo = function () {};
 
     ancestorInfo.current = info;
 
+    //  针对特殊内容
     if (tag === 'form') {
       ancestorInfo.formTag = info;
     }
