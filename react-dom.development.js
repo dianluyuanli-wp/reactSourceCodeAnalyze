@@ -10516,18 +10516,24 @@ var updatedAncestorInfo = function () {};
   /**
    * Returns whether
    */
+
+   // 是否是父组件可用的tag
   var isTagValidWithParent = function (tag, parentTag) {
+    //  首先确认我们是否在一个不同的解析模式
     // First, let's check if we're in an unusual parsing mode...
+    //  如果是以下的tag，可以直接判断
     switch (parentTag) {
       // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-inselect
       case 'select':
         return tag === 'option' || tag === 'optgroup' || tag === '#text';
       case 'optgroup':
         return tag === 'option' || tag === '#text';
+        //  严格意义上来说，看见了option不代表我们在select中
       // Strictly speaking, seeing an <option> doesn't mean we're in a <select>
       // but
       case 'option':
         return tag === '#text';
+        //  
       // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-intd
       // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-incaption
       // No special behavior since these rules fall back to "in body" mode for
@@ -10535,6 +10541,7 @@ var updatedAncestorInfo = function () {};
 
       // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-intr
       case 'tr':
+        //  表格相关
         return tag === 'th' || tag === 'td' || tag === 'style' || tag === 'script' || tag === 'template';
       // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-intbody
       case 'tbody':
@@ -10557,6 +10564,8 @@ var updatedAncestorInfo = function () {};
         return tag === 'html';
     }
 
+    //  在body的解析模式里面，我们禁止部分tag的组合，那些解析规则会导致错误的打开或者
+    //  闭合标签被添加
     // Probably in the "in body" parsing mode, so we outlaw only tag combos
     // where the parsing rules cause implicit opens or closes to be added.
     // https://html.spec.whatwg.org/multipage/syntax.html#parsing-main-inbody
@@ -10567,10 +10576,12 @@ var updatedAncestorInfo = function () {};
       case 'h4':
       case 'h5':
       case 'h6':
+        //  h1234等等标签不允许嵌套同类标签
         return parentTag !== 'h1' && parentTag !== 'h2' && parentTag !== 'h3' && parentTag !== 'h4' && parentTag !== 'h5' && parentTag !== 'h6';
 
       case 'rp':
       case 'rt':
+        //  不能在这个范围里面
         return impliedEndTags.indexOf(parentTag) === -1;
 
       case 'body':
