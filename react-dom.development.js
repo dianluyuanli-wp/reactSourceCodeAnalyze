@@ -10861,6 +10861,7 @@ function prepareForCommit(containerInfo) {
   setEnabled(false);
 }
 
+//  提交更改后重置
 function resetAfterCommit(containerInfo) {
   restoreSelection(selectionInformation);
   selectionInformation = null;
@@ -10868,64 +10869,83 @@ function resetAfterCommit(containerInfo) {
   eventsEnabled = null;
 }
 
+//  创造实例
 function createInstance(type, props, rootContainerInstance, hostContext, internalInstanceHandle) {
   var parentNamespace = void 0;
   {
+    //  在验证的时候考虑命名空间
     // TODO: take namespace into account when validating.
     var hostContextDev = hostContext;
+    //  验证dom嵌套
     validateDOMNesting(type, null, hostContextDev.ancestorInfo);
     if (typeof props.children === 'string' || typeof props.children === 'number') {
       var string = '' + props.children;
+      //  获取祖先信息
       var ownAncestorInfo = updatedAncestorInfo(hostContextDev.ancestorInfo, type);
       validateDOMNesting(null, string, ownAncestorInfo);
     }
     parentNamespace = hostContextDev.namespace;
   }
+  //  创建dom元素
   var domElement = createElement(type, props, rootContainerInstance, parentNamespace);
+  //  预先缓存internalInstanceHandle的fiberNode
   precacheFiberNode(internalInstanceHandle, domElement);
+  //  更新fiber属性
   updateFiberProps(domElement, props);
   return domElement;
 }
 
+//  新增初始子元素
 function appendInitialChild(parentInstance, child) {
+  //  父实例增加子元素
   parentInstance.appendChild(child);
 }
 
+//  最后初始化化子元素
 function finalizeInitialChildren(domElement, type, props, rootContainerInstance, hostContext) {
   setInitialProperties(domElement, type, props, rootContainerInstance);
   return shouldAutoFocusHostComponent(type, props);
 }
 
+//  准备更新
 function prepareUpdate(domElement, type, oldProps, newProps, rootContainerInstance, hostContext) {
   {
     var hostContextDev = hostContext;
+    //  新老属性不一致且类型为string或者数字
     if (typeof newProps.children !== typeof oldProps.children && (typeof newProps.children === 'string' || typeof newProps.children === 'number')) {
       var string = '' + newProps.children;
+      //  获取祖先信息
       var ownAncestorInfo = updatedAncestorInfo(hostContextDev.ancestorInfo, type);
       validateDOMNesting(null, string, ownAncestorInfo);
     }
   }
+  //  属性比较，获得一个update数组
   return diffProperties(domElement, type, oldProps, newProps, rootContainerInstance);
 }
 
+//  那些需要设置text内容
 function shouldSetTextContent(type, props) {
   return type === 'textarea' || type === 'option' || type === 'noscript' || typeof props.children === 'string' || typeof props.children === 'number' || typeof props.dangerouslySetInnerHTML === 'object' && props.dangerouslySetInnerHTML !== null && props.dangerouslySetInnerHTML.__html != null;
 }
 
+//  是否应该对子树降权
 function shouldDeprioritizeSubtree(type, props) {
   return !!props.hidden;
 }
 
+//  创造文本实例
 function createTextInstance(text, rootContainerInstance, hostContext, internalInstanceHandle) {
   {
     var hostContextDev = hostContext;
     validateDOMNesting(null, text, hostContextDev.ancestorInfo);
   }
   var textNode = createTextNode(text, rootContainerInstance);
+  //  给节点注入缓存
   precacheFiberNode(internalInstanceHandle, textNode);
   return textNode;
 }
 
+//  是否是原始的渲染器
 var isPrimaryRenderer = true;
 // This initialization code may run even on server environments
 // if a component just imports ReactDOM (e.g. for findDOMNode).
