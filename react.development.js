@@ -1718,7 +1718,7 @@ function lazy(ctor) {
   };
 
   {
-    //  在生产环境下，这些都会设置再对象上
+    //  在生产环境下，这些都会设置在对象上
     // In production, this would just set it on the object.
     var defaultProps = void 0;
     var propTypes = void 0;

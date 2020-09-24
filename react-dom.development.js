@@ -10947,9 +10947,13 @@ function createTextInstance(text, rootContainerInstance, hostContext, internalIn
 
 //  是否是原始的渲染器
 var isPrimaryRenderer = true;
+//  以下的初始化代码在server端环境下也有可能会运行，只要有一个组件引入了reactDom
+//  (例如findDomNode)某些环境下不会有setTimeout或者clearTimeout
+
 // This initialization code may run even on server environments
 // if a component just imports ReactDOM (e.g. for findDOMNode).
 // Some environments might not have setTimeout or clearTimeout.
+
 var scheduleTimeout = typeof setTimeout === 'function' ? setTimeout : undefined;
 var cancelTimeout = typeof clearTimeout === 'function' ? clearTimeout : undefined;
 var noTimeout = -1;
@@ -10962,47 +10966,73 @@ var cancelPassiveEffects = scheduler.unstable_cancelCallback;
 
 var supportsMutation = true;
 
+//  实施挂载
 function commitMount(domElement, type, newProps, internalInstanceHandle) {
+  //  尽管这个名字可能暗示着别的意思，这个方法只会在挂载过程中有已排期的更新的时间线
+  //  时才会更新。这个将会在finalizeInitialChildren返回true的时候发生
+  //  (它实现了用户端的autoFocus属性)。但是这里有其他的情况导致这个方法执行（例如
+  //  在前后端渲染不一致时更新文本内容）。我们将会再次检查
+
   // Despite the naming that might imply otherwise, this method only
   // fires if there is an `Update` effect scheduled during mounting.
   // This happens if `finalizeInitialChildren` returns `true` (which it
   // does to implement the `autoFocus` attribute on the client). But
   // there are also other cases when this might happen (such as patching
   // up text content during hydration mismatch). So we'll check this again.
+
+  //  需要自动聚焦主组件时
   if (shouldAutoFocusHostComponent(type, newProps)) {
     domElement.focus();
   }
 }
 
+//  进行更新
 function commitUpdate(domElement, updatePayload, type, oldProps, newProps, internalInstanceHandle) {
+  //  更新属性句柄从而我们知道那些属性是当前事件的句柄
+  
   // Update the props handle so that we know which props are the ones with
   // with current event handlers.
+  
+  //  更新fiber
   updateFiberProps(domElement, newProps);
+  //  应用diff
+
   // Apply the diff to the DOM node.
+  //  更新属性
   updateProperties(domElement, updatePayload, type, oldProps, newProps);
 }
 
+//  重置文本内容
 function resetTextContent(domElement) {
   setTextContent(domElement, '');
 }
 
+//  进行文本更新
 function commitTextUpdate(textInstance, oldText, newText) {
   textInstance.nodeValue = newText;
 }
 
+//  添加子元素
 function appendChild(parentInstance, child) {
   parentInstance.appendChild(child);
 }
 
+//  添加子元素到容器
 function appendChildToContainer(container, child) {
   var parentNode = void 0;
+  //  判断类型是否是注释节点
   if (container.nodeType === COMMENT_NODE) {
+    //  容器的父节点
     parentNode = container.parentNode;
+    //  在父节点的前面插入
     parentNode.insertBefore(child, container);
   } else {
+    //  否则直接添加
     parentNode = container;
     parentNode.appendChild(child);
   }
+  //  这个容器能够被用在传送门上
+  //  如果传送门上的某些元素被点击，这个click事件将会通过react tree进行冒泡
   // This container might be used for a portal.
   // If something inside a portal is clicked, that click should bubble
   // through the React tree. However, on Mobile Safari the click would
