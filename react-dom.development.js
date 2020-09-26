@@ -11033,6 +11033,10 @@ function appendChildToContainer(container, child) {
   }
   //  这个容器能够被用在传送门上
   //  如果传送门上的某些元素被点击，这个click事件将会通过react tree进行冒泡
+  //  但是在移动端的safari上，click不会通过dom树进行冒泡，除非其祖先元素上面
+  //  有onClick的监听函数。所以我们不会感知并且触发它。这就是我们为什么要确保非
+  //  react根组件容器需要有定义onClick事件。
+
   // This container might be used for a portal.
   // If something inside a portal is clicked, that click should bubble
   // through the React tree. However, on Mobile Safari the click would
@@ -11043,27 +11047,37 @@ function appendChildToContainer(container, child) {
   // https://github.com/facebook/react/issues/11918
   var reactRootContainer = container._reactRootContainer;
   if ((reactRootContainer === null || reactRootContainer === undefined) && parentNode.onclick === null) {
+    //  todo: 这个触发方式对于svg,mathml或者传统的元素不大友好
     // TODO: This cast may not be sound for SVG, MathML or custom elements.
+    
+    //  绑定onClick事件，即noop
     trapClickOnNonInteractiveElement(parentNode);
   }
 }
 
+//  在组件实例前插入内容
 function insertBefore(parentInstance, child, beforeChild) {
   parentInstance.insertBefore(child, beforeChild);
 }
 
+//  在container前插入内容
 function insertInContainerBefore(container, child, beforeChild) {
+  //  判断节点是不是注释内容
   if (container.nodeType === COMMENT_NODE) {
+    //  是的话插在容器前方
     container.parentNode.insertBefore(child, beforeChild);
   } else {
+    //  否则插在容器内部
     container.insertBefore(child, beforeChild);
   }
 }
 
+//  移除子元素
 function removeChild(parentInstance, child) {
   parentInstance.removeChild(child);
 }
 
+//  从容器中移除子元素
 function removeChildFromContainer(container, child) {
   if (container.nodeType === COMMENT_NODE) {
     container.parentNode.removeChild(child);
@@ -11072,6 +11086,7 @@ function removeChildFromContainer(container, child) {
   }
 }
 
+//  清除延迟的边界
 function clearSuspenseBoundary(parentInstance, suspenseInstance) {
   var node = suspenseInstance;
   // Delete all nodes within this suspense boundary.
