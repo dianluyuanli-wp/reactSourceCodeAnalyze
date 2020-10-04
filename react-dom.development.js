@@ -7899,6 +7899,7 @@ Object.keys(isUnitlessNumber).forEach(function (prop) {
  */
 
  // 危险的style值
+ // 进行一些处理，比如加px后缀等等
 function dangerousStyleValue(name, value, isCustomProperty) {
   //  注意到我们移除了escapeTextForBrowser的调用，因为整个字符串将会被转义，当属性被注入到
   //  标记中时。如果你提供了不安全的用户数据，他们将会注入任意的css,这可能
@@ -11087,90 +11088,127 @@ function removeChildFromContainer(container, child) {
 }
 
 //  清除延迟的边界
+//  把一个节点的所有兄弟元素都删掉
 function clearSuspenseBoundary(parentInstance, suspenseInstance) {
+  //  延迟的实例
   var node = suspenseInstance;
+  //  删除掉所有的在这个延迟边界内的节点。这里可能存在嵌套的节点，所以我们
+  //  需要记录我们到了多深的地方，并且在到达顶部之后退出循环
+
   // Delete all nodes within this suspense boundary.
   // There might be nested nodes so we need to keep track of how
   // deep we are and only break out when we're back on top.
   var depth = 0;
   do {
+    //  遍历下一个元素
     var nextNode = node.nextSibling;
+    //  移除子节点
     parentInstance.removeChild(node);
+    //  如果是注释节点
     if (nextNode && nextNode.nodeType === COMMENT_NODE) {
       var data = nextNode.data;
       if (data === SUSPENSE_END_DATA) {
         if (depth === 0) {
+          //  最外围节点移除下一个节点并返回
           parentInstance.removeChild(nextNode);
           return;
         } else {
+          //  深度减一
           depth--;
         }
       } else if (data === SUSPENSE_START_DATA) {
+        //  否则的话深度加一
         depth++;
       }
     }
+    //  当前节点替换
     node = nextNode;
   } while (node);
+  //  todo: 告警，我们没有找到注释结束的边界
+
   // TODO: Warn, we didn't find the end comment boundary.
 }
 
+//  从容器里面移除怀疑边界
 function clearSuspenseBoundaryFromContainer(container, suspenseInstance) {
+  //  如果是注释节点，找容器的父节点
   if (container.nodeType === COMMENT_NODE) {
     clearSuspenseBoundary(container.parentNode, suspenseInstance);
   } else if (container.nodeType === ELEMENT_NODE) {
+    //  否则是自己
     clearSuspenseBoundary(container, suspenseInstance);
   } else {
+    //  document永远不能含有suspense边界
     // Document nodes should never contain suspense boundaries.
   }
 }
 
+//  隐藏实例
 function hideInstance(instance) {
+  //  todo: 这个操作对所有元素类型都适用吗?mathML呢?我们应该给这些方法传递上下文吗?
   // TODO: Does this work for all element types? What about MathML? Should we
   // pass host context to this method?
   instance = instance;
   instance.style.display = 'none';
 }
 
+//  隐藏文本实例的内容
 function hideTextInstance(textInstance) {
   textInstance.nodeValue = '';
 }
 
+//  展示实例
 function unhideInstance(instance, props) {
   instance = instance;
+  //  读取样式
   var styleProp = props[STYLE];
+  //  是否展示
   var display = styleProp !== undefined && styleProp !== null && styleProp.hasOwnProperty('display') ? styleProp.display : null;
   instance.style.display = dangerousStyleValue('display', display);
 }
 
+//  重新给文本实例赋值
 function unhideTextInstance(textInstance, text) {
   textInstance.nodeValue = text;
 }
 
+//  水合，前后端渲染
 // -------------------
 //     Hydration
 // -------------------
 
+//  支持前后端渲染水合
 var supportsHydration = true;
 
+//  返回能够进行前后端渲染水合
+//  返回实例
 function canHydrateInstance(instance, type, props) {
+  //  不是element类型或者类型和node名字不一致
   if (instance.nodeType !== ELEMENT_NODE || type.toLowerCase() !== instance.nodeName.toLowerCase()) {
     return null;
   }
+  //  这个现在成为一个精确元素节点
   // This has now been refined to an element node.
   return instance;
 }
 
+//  返回能够进行水合的文本实例
 function canHydrateTextInstance(instance, text) {
+  //  判断是否有内容
   if (text === '' || instance.nodeType !== TEXT_NODE) {
     // Empty strings are not parsed by HTML so there won't be a correct match here.
     return null;
   }
+  //  返回一个精确的文本节点
   // This has now been refined to a text node.
   return instance;
 }
 
+//  返回能够水合的延迟实例
 function canHydrateSuspenseInstance(instance) {
+  //  如果不是注释，返回null
   if (instance.nodeType !== COMMENT_NODE) {
+    //  空串不会被html解析，所以这里不会有正确的匹配
     // Empty strings are not parsed by HTML so there won't be a correct match here.
     return null;
   }
@@ -11178,15 +11216,19 @@ function canHydrateSuspenseInstance(instance) {
   return instance;
 }
 
+//  获取下一个可以水合的兄弟元素
 function getNextHydratableSibling(instance) {
   var node = instance.nextSibling;
   // Skip non-hydratable nodes.
+  //  跳过不能水合的节点
+  //  判断依据是非空且非element且非文本节点且不支持服务端渲染的延迟标签或者不是注释，节点数据不是$
   while (node && node.nodeType !== ELEMENT_NODE && node.nodeType !== TEXT_NODE && (!enableSuspenseServerRenderer || node.nodeType !== COMMENT_NODE || node.data !== SUSPENSE_START_DATA)) {
     node = node.nextSibling;
   }
   return node;
 }
 
+//  获取第一个能够水合的子元素
 function getFirstHydratableChild(parentInstance) {
   var next = parentInstance.firstChild;
   // Skip non-hydratable nodes.
@@ -11196,66 +11238,94 @@ function getFirstHydratableChild(parentInstance) {
   return next;
 }
 
+//  对实例进行水合
 function hydrateInstance(instance, type, props, rootContainerInstance, hostContext, internalInstanceHandle) {
+  //  预缓存fiber节点
   precacheFiberNode(internalInstanceHandle, instance);
+  //  这个很有可能延迟，直到所有事件的改变都触发
   // TODO: Possibly defer this until the commit phase where all the events
   // get attached.
+
+  //  更新fiber属性
   updateFiberProps(instance, props);
+  //  父命名空间
   var parentNamespace = void 0;
   {
     var hostContextDev = hostContext;
     parentNamespace = hostContextDev.namespace;
   }
+  //  比较水合过后的属性
   return diffHydratedProperties(instance, type, props, parentNamespace, rootContainerInstance);
 }
 
+//  水合过后文本实例
 function hydrateTextInstance(textInstance, text, internalInstanceHandle) {
+  //  预缓存节点
   precacheFiberNode(internalInstanceHandle, textInstance);
+  //  比较水和后的文本
+  //  返回true or false
   return diffHydratedText(textInstance, text);
 }
 
+//  在实例延迟之后，获取下一个可水合的实例
 function getNextHydratableInstanceAfterSuspenseInstance(suspenseInstance) {
+  //  获得下一个兄弟节点
   var node = suspenseInstance.nextSibling;
+  //  跳过所有这个延迟范围内的节点。这里可能存在潜逃的节点
+  //  所以我们需要追踪深度，并且只在回到顶层的时候跳出循环
   // Skip past all nodes within this suspense boundary.
   // There might be nested nodes so we need to keep track of how
   // deep we are and only break out when we're back on top.
   var depth = 0;
   while (node) {
+    //  如果是注释节点
     if (node.nodeType === COMMENT_NODE) {
       var data = node.data;
+      //  如果
       if (data === SUSPENSE_END_DATA) {
         if (depth === 0) {
+          //  如果深度为零，返回最近的节点
           return getNextHydratableSibling(node);
         } else {
+          //  否则深度减一
           depth--;
         }
+        //  开始标记，深度加一
       } else if (data === SUSPENSE_START_DATA) {
         depth++;
       }
     }
+    //  走到下一个节点
     node = node.nextSibling;
   }
   // TODO: Warn, we didn't find the end comment boundary.
+  //  否则返回null
   return null;
 }
 
+//  水合的容器并不匹配容器文本实例
 function didNotMatchHydratedContainerTextInstance(parentContainer, textInstance, text) {
   {
     warnForUnmatchedText(textInstance, text);
   }
 }
 
+//  并不匹配的水合文本实例
 function didNotMatchHydratedTextInstance(parentType, parentProps, parentInstance, textInstance, text) {
   if (true && parentProps[SUPPRESS_HYDRATION_WARNING] !== true) {
     warnForUnmatchedText(textInstance, text);
   }
 }
 
+//  并不匹配的水合容器实例
 function didNotHydrateContainerInstance(parentContainer, instance) {
   {
+    //  如果是元素节点
     if (instance.nodeType === ELEMENT_NODE) {
+      //  告警需要删除节点
       warnForDeletedHydratableElement(parentContainer, instance);
     } else if (instance.nodeType === COMMENT_NODE) {
+      //  注释的话啥也不干
       // TODO: warnForDeletedHydratableSuspenseBoundary
     } else {
       warnForDeletedHydratableText(parentContainer, instance);
@@ -11263,7 +11333,9 @@ function didNotHydrateContainerInstance(parentContainer, instance) {
   }
 }
 
+//  并不匹配的水合实例
 function didNotHydrateInstance(parentType, parentProps, parentInstance, instance) {
+  //  如果没有告警过
   if (true && parentProps[SUPPRESS_HYDRATION_WARNING] !== true) {
     if (instance.nodeType === ELEMENT_NODE) {
       warnForDeletedHydratableElement(parentInstance, instance);
@@ -11275,12 +11347,15 @@ function didNotHydrateInstance(parentType, parentProps, parentInstance, instance
   }
 }
 
+//  告警:没有找到水合容器实例
 function didNotFindHydratableContainerInstance(parentContainer, type, props) {
   {
+    //  水合元素插入告警
     warnForInsertedHydratedElement(parentContainer, type, props);
   }
 }
 
+//  没有找到水合容器文本实例
 function didNotFindHydratableContainerTextInstance(parentContainer, text) {
   {
     warnForInsertedHydratedText(parentContainer, text);
@@ -11288,128 +11363,189 @@ function didNotFindHydratableContainerTextInstance(parentContainer, text) {
 }
 
 
-
+//  没有找到可水合的实例
 function didNotFindHydratableInstance(parentType, parentProps, parentInstance, type, props) {
   if (true && parentProps[SUPPRESS_HYDRATION_WARNING] !== true) {
     warnForInsertedHydratedElement(parentInstance, type, props);
   }
 }
 
+//  没有找到可水合的文本实例
 function didNotFindHydratableTextInstance(parentType, parentProps, parentInstance, text) {
   if (true && parentProps[SUPPRESS_HYDRATION_WARNING] !== true) {
     warnForInsertedHydratedText(parentInstance, text);
   }
 }
 
+//  没有找到可水合的延迟渲染实例
 function didNotFindHydratableSuspenseInstance(parentType, parentProps, parentInstance) {
   if (true && parentProps[SUPPRESS_HYDRATION_WARNING] !== true) {
     // TODO: warnForInsertedHydratedSuspense(parentInstance);
   }
 }
 
+//  通过前缀的测量尺寸，使得可能去做过滤
+//  比较长的前缀在开发者工具中比较难去阅读
 // Prefix measurements so that it's possible to filter them.
 // Longer prefixes are hard to read in DevTools.
 var reactEmoji = '\u269B';
 var warningEmoji = '\u26D4';
+//  支持用户端计时
 var supportsUserTiming = typeof performance !== 'undefined' && typeof performance.mark === 'function' && typeof performance.clearMarks === 'function' && typeof performance.measure === 'function' && typeof performance.clearMeasures === 'function';
 
+//  追踪当前的fiber，从而我们能够知道暂停时展开的路径
+//  这个开起来跟nextUnitOfWork很像，我们能够整合他们吗？
 // Keep track of current fiber so that we know the path to unwind on pause.
 // TODO: this looks the same as nextUnitOfWork in scheduler. Can we unify them?
 var currentFiber = null;
+
+//  如果我们处在用户的代码中，当下是哪一个fiber或者方法？如果重用currentFiber
+//  的话，很有可能会产生混乱，因为用户代码的fiber在变化的过程中也有可能会发生变化。
+//  但是我们不需要放开它。（因为在提交变动的过程中生命周期并不像树）
+
 // If we're in the middle of user code, which fiber and method is it?
 // Reusing `currentFiber` would be confusing for this because user code fiber
 // can change during commit phase too, but we don't need to unwind it (since
 // lifecycles in the commit phase don't resemble a tree).
+
 var currentPhase = null;
 var currentPhaseFiber = null;
+
+//  生命周期钩子安排了一个更新了吗？这通常是一个性能问题，所以我们需要追踪它，
+//  将其包含在报告里，追踪由于更新合并而产生的改变
+
 // Did lifecycle hook schedule an update? This is often a performance problem,
 // so we will keep track of it, and include it in the report.
 // Track commits caused by cascading updates.
+
+//  各种控制的变量
+//  正在提交修改
 var isCommitting = false;
+//  已经安排好的更新是否在当前的提交中
 var hasScheduledUpdateInCurrentCommit = false;
+//  已经安排好的更新是否在当前的环节中
 var hasScheduledUpdateInCurrentPhase = false;
+//  在当前工作流中的提交数
 var commitCountInCurrentWorkLoop = 0;
+//  在当前的提交中的受影响的commit数目
 var effectCountInCurrentCommit = 0;
+//  是否在等待回调
 var isWaitingForCallback = false;
+//  在提交的过程中，我们仅仅会展示一个测量结果（方法名维度），来避免由于
+//  测量负载过高导致的提交流程变长
 // During commits, we only show a measurement once per method name
 // to avoid stretch the commit phase with measurement overhead.
+
+//  当前提交中的标签集合
 var labelsInCurrentCommit = new Set();
 
+//  格式化标记名
 var formatMarkName = function (markName) {
+  //  react的emoji加上markName
   return reactEmoji + ' ' + markName;
 };
 
+//  格式化标签
 var formatLabel = function (label, warning) {
+  //  拼首尾的标志位，根据是否有warning
   var prefix = warning ? warningEmoji + ' ' : reactEmoji + ' ';
   var suffix = warning ? ' Warning: ' + warning : '';
   return '' + prefix + label + suffix;
 };
 
+//  performance标记,浏览器的performance标记标签里面，根据传入的内容生成一个带时间戳的标记
+//  https://developer.mozilla.org/en-US/docs/Web/API/Performance/mark
 var beginMark = function (markName) {
   performance.mark(formatMarkName(markName));
 };
 
+//  清除掉标记
 var clearMark = function (markName) {
   performance.clearMarks(formatMarkName(markName));
 };
 
+//  结束标记
 var endMark = function (label, markName, warning) {
+  //  获得标记名和标签
   var formattedMarkName = formatMarkName(markName);
   var formattedLabel = formatLabel(label, warning);
   try {
     performance.measure(formattedLabel, formattedMarkName);
   } catch (err) {}
+  //  如果先前的标记因为某种原因遗失了，这个将会被抛弃。
+  //  这种情况只会在某些react意外崩溃的情况下会发生。不要再犯更多错误了
+
   // If previous mark was missing for some reason, this will throw.
   // This could only happen if React crashed in an unexpected place earlier.
   // Don't pile on with more errors.
 
+  //  立即清理掉标记，以免缓存膨胀
   // Clear marks immediately to avoid growing buffer.
   performance.clearMarks(formattedMarkName);
   performance.clearMeasures(formattedLabel);
 };
 
+//  获取fiber的标记名
 var getFiberMarkName = function (label, debugID) {
   return label + ' (#' + debugID + ')';
 };
 
+//  获取fiber的标签
 var getFiberLabel = function (componentName, isMounted, phase) {
   if (phase === null) {
+    //  这里有复合组件的总时间计算
     // These are composite component total time measurements.
     return componentName + ' [' + (isMounted ? 'update' : 'mount') + ']';
   } else {
+    //  复合组件的方法
     // Composite component methods.
     return componentName + '.' + phase;
   }
 };
 
+//  是否开始fiber的标记
 var beginFiberMark = function (fiber, phase) {
+  //  组件的名字
   var componentName = getComponentName(fiber.type) || 'Unknown';
+  //  设置debug_id
   var debugID = fiber._debugID;
+  //  是否已经挂载，已经挂载的有alternate副本
   var isMounted = fiber.alternate !== null;
+  //  获取标签
   var label = getFiberLabel(componentName, isMounted, phase);
-
+  //  如果正在提交变动，并且label在当前的提交中
   if (isCommitting && labelsInCurrentCommit.has(label)) {
+    //  在变动提交阶段，我们不会展示重复的标签，因为这里有一个固定的负载在每一个测量时，
+    //  我们并不想要去拉长不必要的提交阶段
+
     // During the commit phase, we don't show duplicate labels because
     // there is a fixed overhead for every measurement, and we don't
     // want to stretch the commit phase beyond necessary.
     return false;
   }
+  //  添加标签
   labelsInCurrentCommit.add(label);
-
+  //  获取标记名
   var markName = getFiberMarkName(label, debugID);
+  //  开始标记
   beginMark(markName);
   return true;
 };
 
+//  清理掉fiberMark
 var clearFiberMark = function (fiber, phase) {
+  //  获得组件名字
   var componentName = getComponentName(fiber.type) || 'Unknown';
   var debugID = fiber._debugID;
+  //  有替身的就标明已经挂载好了
   var isMounted = fiber.alternate !== null;
   var label = getFiberLabel(componentName, isMounted, phase);
+  //  label+id拼成markName
   var markName = getFiberMarkName(label, debugID);
   clearMark(markName);
 };
 
+//  关闭FiberMark
 var endFiberMark = function (fiber, phase, warning) {
   var componentName = getComponentName(fiber.type) || 'Unknown';
   var debugID = fiber._debugID;
@@ -11419,7 +11555,10 @@ var endFiberMark = function (fiber, phase, warning) {
   endMark(label, markName, warning);
 };
 
+//  是否应该忽略fiber
 var shouldIgnoreFiber = function (fiber) {
+  //  主组件在时间线中应该被忽略，我们应该检查fiber.type的类型，但是
+  //  这个在rn中也有效吗？
   // Host components should be skipped in the timeline.
   // We could check typeof fiber.type, but does this work with RN?
   switch (fiber.tag) {
@@ -11431,26 +11570,35 @@ var shouldIgnoreFiber = function (fiber) {
     case ContextProvider:
     case ContextConsumer:
     case Mode:
+      //  以上这些都是true
       return true;
     default:
+      //  其他是false
       return false;
   }
 };
 
+//  清理掉挂起的状态测量
 var clearPendingPhaseMeasurement = function () {
+  //  有当前状态，也有当前状态fiber时，直接清理
   if (currentPhase !== null && currentPhaseFiber !== null) {
     clearFiberMark(currentPhaseFiber, currentPhase);
   }
+  //  否则清理状态
   currentPhaseFiber = null;
   currentPhase = null;
   hasScheduledUpdateInCurrentPhase = false;
 };
 
+//  暂停计时器
 var pauseTimers = function () {
+  //  停掉当前所有的激活计时器，使它们能够被重启，如果我们在
+  //  稍后的同一个事件单元延迟循环中继续的话
   // Stops all currently active measurements so that they can be resumed
   // if we continue in a later deferred loop from the same unit of work.
   var fiber = currentFiber;
   while (fiber) {
+    //  遍历所有的fiber,正在debug的全部改掉
     if (fiber._debugIsCurrentlyTiming) {
       endFiberMark(fiber, null, null);
     }
@@ -11458,23 +11606,29 @@ var pauseTimers = function () {
   }
 };
 
+//  递归地重启定时器
 var resumeTimersRecursively = function (fiber) {
   if (fiber.return !== null) {
     resumeTimersRecursively(fiber.return);
   }
+  //  没有上一个了，就终止
   if (fiber._debugIsCurrentlyTiming) {
     beginFiberMark(fiber, null);
   }
 };
 
+//  重启计时器
 var resumeTimers = function () {
+  //  重启所有的在上一个延迟循环中激活的测量
   // Resumes all measurements that were active during the last deferred loop.
   if (currentFiber !== null) {
     resumeTimersRecursively(currentFiber);
   }
 };
 
+//  记录有效的commit
 function recordEffect() {
+  //  如果启用了用户计时api
   if (enableUserTimingAPI) {
     effectCountInCurrentCommit++;
   }
