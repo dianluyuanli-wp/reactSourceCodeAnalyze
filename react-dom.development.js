@@ -11470,6 +11470,7 @@ var endMark = function (label, markName, warning) {
   var formattedMarkName = formatMarkName(markName);
   var formattedLabel = formatLabel(label, warning);
   try {
+    //  记录间隔时间
     performance.measure(formattedLabel, formattedMarkName);
   } catch (err) {}
   //  如果先前的标记因为某种原因遗失了，这个将会被抛弃。
@@ -11634,107 +11635,141 @@ function recordEffect() {
   }
 }
 
+//  更新日程表的记录
 function recordScheduleUpdate() {
+  //  如果可以使用计时api了
   if (enableUserTimingAPI) {
+    //  如果正在提交改动
     if (isCommitting) {
+      //  在当前的改动commit中是否已经更新
       hasScheduledUpdateInCurrentCommit = true;
     }
     if (currentPhase !== null && currentPhase !== 'componentWillMount' && currentPhase !== 'componentWillReceiveProps') {
+      //  在当前生命周期中是否安排了更新
       hasScheduledUpdateInCurrentPhase = true;
     }
   }
 }
 
+//  开启请求回调计时器
 function startRequestCallbackTimer() {
   if (enableUserTimingAPI) {
     if (supportsUserTiming && !isWaitingForCallback) {
+      //  标记正在等待回调
       isWaitingForCallback = true;
+      //  等待异步回调
       beginMark('(Waiting for async callback...)');
     }
   }
 }
 
+//  停止请求回调的计时器
 function stopRequestCallbackTimer(didExpire, expirationTime) {
+  //  是否启用用户计时器api
   if (enableUserTimingAPI) {
     if (supportsUserTiming) {
       isWaitingForCallback = false;
+      //  告警文字
       var warning = didExpire ? 'React was blocked by main thread' : null;
       endMark('(Waiting for async callback... will force flush in ' + expirationTime + ' ms)', '(Waiting for async callback...)', warning);
     }
   }
 }
 
+//  开启工作计时器
 function startWorkTimer(fiber) {
+  //  如果开启了用户端计时器api
   if (enableUserTimingAPI) {
+    // 如果不支持，或者需要忽略掉fiber
     if (!supportsUserTiming || shouldIgnoreFiber(fiber)) {
       return;
     }
+    //  如果我们暂停，这就是那个释放的fiber
     // If we pause, this is the fiber to unwind from.
     currentFiber = fiber;
+    //  更新当前的fieber
     if (!beginFiberMark(fiber, null)) {
       return;
     }
+    //  正在当前的定时器中
     fiber._debugIsCurrentlyTiming = true;
   }
 }
 
+//  取消正在工作的计时器
 function cancelWorkTimer(fiber) {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming || shouldIgnoreFiber(fiber)) {
       return;
     }
+    //  记住我们并没有完成这个fiber的测量，否则的话绘制出火焰图针对一些很小的更新
+    //  也会很深
     // Remember we shouldn't complete measurement for this fiber.
     // Otherwise flamechart will be deep even for small updates.
     fiber._debugIsCurrentlyTiming = false;
+    //  清除标记
     clearFiberMark(fiber, null);
   }
 }
 
+//  停止正在工作的计时器
 function stopWorkTimer(fiber) {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming || shouldIgnoreFiber(fiber)) {
       return;
     }
+    //  如果我们暂停，这就是那个释放的fiber
     // If we pause, its parent is the fiber to unwind from.
     currentFiber = fiber.return;
     if (!fiber._debugIsCurrentlyTiming) {
       return;
     }
     fiber._debugIsCurrentlyTiming = false;
+    //  结束标记
     endFiberMark(fiber, null, null);
   }
 }
 
+//  停止失败的计时器
 function stopFailedWorkTimer(fiber) {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming || shouldIgnoreFiber(fiber)) {
       return;
     }
     // If we pause, its parent is the fiber to unwind from.
+    //  当前的fiber挂掉了，返回上一个
     currentFiber = fiber.return;
     if (!fiber._debugIsCurrentlyTiming) {
       return;
     }
+    //  正在当前的计时器中，置false
     fiber._debugIsCurrentlyTiming = false;
+    //  判断tag,如果是延迟组件或者是脱水的延迟加载组件,warning 渲染被延迟否则在错误边界中有错误被抛出
     var warning = fiber.tag === SuspenseComponent || fiber.tag === DehydratedSuspenseComponent ? 'Rendering was suspended' : 'An error was thrown inside this error boundary';
     endFiberMark(fiber, null, warning);
   }
 }
 
+//  开启生命周期计时器
 function startPhaseTimer(fiber, phase) {
+  //  允许使用用户计时api
   if (enableUserTimingAPI) {
+    //  不支持的话直接返回
     if (!supportsUserTiming) {
       return;
     }
+    //  清理掉pending的测量
     clearPendingPhaseMeasurement();
     if (!beginFiberMark(fiber, phase)) {
       return;
     }
+    //  更新当前生命周期和其fiber
     currentPhaseFiber = fiber;
     currentPhase = phase;
   }
 }
 
+//
 function stopPhaseTimer() {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
