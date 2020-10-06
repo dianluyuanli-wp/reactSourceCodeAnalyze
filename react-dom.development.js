@@ -11769,7 +11769,7 @@ function startPhaseTimer(fiber, phase) {
   }
 }
 
-//
+//  停止生命周期计时器
 function stopPhaseTimer() {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
@@ -11777,64 +11777,87 @@ function stopPhaseTimer() {
     }
     if (currentPhase !== null && currentPhaseFiber !== null) {
       var warning = hasScheduledUpdateInCurrentPhase ? 'Scheduled a cascading update' : null;
+      //  停止计时
       endFiberMark(currentPhaseFiber, currentPhase, warning);
     }
+    //  当前fiber和生命周期置null
     currentPhase = null;
     currentPhaseFiber = null;
   }
 }
 
+//  开启工作循环计时器
 function startWorkLoopTimer(nextUnitOfWork) {
   if (enableUserTimingAPI) {
     currentFiber = nextUnitOfWork;
     if (!supportsUserTiming) {
       return;
     }
+    //  提交当前的工作循环计数
     commitCountInCurrentWorkLoop = 0;
+    //  这是一个顶层调用，任何的其他测量都会在其中
     // This is top level call.
     // Any other measurements are performed within.
+    //  开始标记 react的树调谐
     beginMark('(React Tree Reconciliation)');
+    //  重启在上一个循环中的所有测量
     // Resume any measurements that were in progress during the last loop.
     resumeTimers();
   }
 }
 
+//  停止工作循环计时器
 function stopWorkLoopTimer(interruptedBy, didCompleteRoot) {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
       return;
     }
     var warning = null;
+    //  是否有中断内容
     if (interruptedBy !== null) {
+      //  如果是根组件
       if (interruptedBy.tag === HostRoot) {
+        //  顶层的更新中断了先前的渲染
         warning = 'A top-level update interrupted the previous render';
       } else {
+        //  获取组件名字
         var componentName = getComponentName(interruptedBy.type) || 'Unknown';
+        //  某个组件的更新打断了原先的渲染
         warning = 'An update to ' + componentName + ' interrupted the previous render';
       }
+      //  如果当前循环数超过1
     } else if (commitCountInCurrentWorkLoop > 1) {
+      //这里有折叠的更新
       warning = 'There were cascading updates';
     }
+    //  当前的更新工作循环计数加1
     commitCountInCurrentWorkLoop = 0;
     var label = didCompleteRoot ? '(React Tree Reconciliation: Completed Root)' : '(React Tree Reconciliation: Yielded)';
     // Pause any measurements until the next loop.
+    //  在下一个循环前暂停任何测量
     pauseTimers();
     endMark(label, '(React Tree Reconciliation)', warning);
   }
 }
 
+//  开启改变的计时器
 function startCommitTimer() {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
       return;
     }
+    //  正在提交变更
     isCommitting = true;
+    //  是否已经在当前的commit中安排好更新
     hasScheduledUpdateInCurrentCommit = false;
+    //  当前commit中的标签清除
     labelsInCurrentCommit.clear();
+    //  开启计时
     beginMark('(Committing Changes)');
   }
 }
 
+//  停止当前commit的计时器
 function stopCommitTimer() {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
@@ -11842,16 +11865,20 @@ function stopCommitTimer() {
     }
 
     var warning = null;
+    //  如果在当前commit中已经有排上日程的更新
     if (hasScheduledUpdateInCurrentCommit) {
+      //  生命周期钩子中有重叠的更新
       warning = 'Lifecycle hook scheduled a cascading update';
     } else if (commitCountInCurrentWorkLoop > 0) {
+      //  由上一个提交中的重叠更新引发
       warning = 'Caused by a cascading update in earlier commit';
     }
     hasScheduledUpdateInCurrentCommit = false;
+    //  当前提交工作循环数加一
     commitCountInCurrentWorkLoop++;
     isCommitting = false;
     labelsInCurrentCommit.clear();
-
+    //  结束标记
     endMark('(Committing Changes)', '(Committing Changes)', warning);
   }
 }
