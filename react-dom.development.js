@@ -11883,42 +11883,52 @@ function stopCommitTimer() {
   }
 }
 
+//  开启改变快照生效计时器
 function startCommitSnapshotEffectsTimer() {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
       return;
     }
+    //  当前commit的影响计数
     effectCountInCurrentCommit = 0;
+    //  开始计数
     beginMark('(Committing Snapshot Effects)');
   }
 }
 
+//  停止提交快照生效计时器
 function stopCommitSnapshotEffectsTimer() {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
       return;
     }
+    //  计数
     var count = effectCountInCurrentCommit;
     effectCountInCurrentCommit = 0;
+    //  正在提交的快照影响
     endMark('(Committing Snapshot Effects: ' + count + ' Total)', '(Committing Snapshot Effects)', null);
   }
 }
 
+//  开启提交主影响计时器
 function startCommitHostEffectsTimer() {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
       return;
     }
+    //  当前commit中的影响计数
     effectCountInCurrentCommit = 0;
     beginMark('(Committing Host Effects)');
   }
 }
 
+//  停止提交到跟节点的影响的计时器
 function stopCommitHostEffectsTimer() {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
       return;
     }
+    //  计数清零
     var count = effectCountInCurrentCommit;
     effectCountInCurrentCommit = 0;
     endMark('(Committing Host Effects: ' + count + ' Total)', '(Committing Host Effects)', null);
