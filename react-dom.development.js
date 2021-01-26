@@ -11935,16 +11935,19 @@ function stopCommitHostEffectsTimer() {
   }
 }
 
+//  开启提交的生命周期计时器
 function startCommitLifeCyclesTimer() {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
       return;
     }
     effectCountInCurrentCommit = 0;
+    //  开启标记
     beginMark('(Calling Lifecycle Methods)');
   }
 }
 
+//  停止生命周期commit计时器
 function stopCommitLifeCyclesTimer() {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
@@ -11952,12 +11955,14 @@ function stopCommitLifeCyclesTimer() {
     }
     var count = effectCountInCurrentCommit;
     effectCountInCurrentCommit = 0;
+    //  结束标记
     endMark('(Calling Lifecycle Methods: ' + count + ' Total)', '(Calling Lifecycle Methods)', null);
   }
 }
 
+//  值堆栈
 var valueStack = [];
-
+//  fiber堆栈
 var fiberStack = void 0;
 
 {
@@ -11966,57 +11971,68 @@ var fiberStack = void 0;
 
 var index = -1;
 
+//  创建游标
 function createCursor(defaultValue) {
+  //  返回默认值
   return {
     current: defaultValue
   };
 }
 
+//  出栈
 function pop(cursor, fiber) {
+  //  游标小于0时报错
   if (index < 0) {
     {
       warningWithoutStack$1(false, 'Unexpected pop.');
     }
     return;
   }
-
+  //  如果入参和堆栈中的不一致，报错
   {
     if (fiber !== fiberStack[index]) {
       warningWithoutStack$1(false, 'Unexpected Fiber popped.');
     }
   }
-
+  //  游标当前的值为数值堆栈的index值
   cursor.current = valueStack[index];
-
+  //  数值堆栈坑位置空
   valueStack[index] = null;
 
   {
+    //  fiber堆栈坑位置空
     fiberStack[index] = null;
   }
-
+  //  游标控制
   index--;
 }
 
+//  入栈实现
 function push(cursor, value, fiber) {
+  //  游标加1
   index++;
-
+  //  数值入栈
   valueStack[index] = cursor.current;
 
   {
+    //  fiber入栈
     fiberStack[index] = fiber;
   }
-
+  //  游标值更新
   cursor.current = value;
 }
 
+//  检查堆栈是否为空
 function checkThatStackIsEmpty() {
   {
+    //  如果index不等于-1，表示堆栈没有被正确重置
     if (index !== -1) {
       warningWithoutStack$1(false, 'Expected an empty stack. Something was not reset properly.');
     }
   }
 }
 
+//  开发环境有中大错误时重置堆栈
 function resetStackAfterFatalErrorInDev() {
   {
     index = -1;
@@ -12024,29 +12040,38 @@ function resetStackAfterFatalErrorInDev() {
     fiberStack.length = 0;
   }
 }
-
+//  丢失子上下文时告警
 var warnedAboutMissingGetChildContext = void 0;
 
 {
   warnedAboutMissingGetChildContext = {};
 }
-
+//  空的上线文对象
 var emptyContextObject = {};
 {
   Object.freeze(emptyContextObject);
 }
 
+//  一个游标指向当前的merge过的堆栈中的上下文对象。
 // A cursor to the current merged context object on the stack.
 var contextStackCursor = createCursor(emptyContextObject);
+//  一个指针指向一个布尔值，表示上下文是否修改
 // A cursor to a boolean indicating whether the context has changed.
+//  是否执行work的堆栈指针
 var didPerformWorkStackCursor = createCursor(false);
+//  追踪先前在堆栈中的上下文对象，我们使用这个来获取父上下文，在我们已将将下一个上下文provider，
+//  并且现在需要去融合他们的上下文。
 // Keep track of the previous context object that was on the stack.
 // We use this to get access to the parent context after we have already
 // pushed the next context provider, and now need to merge their contexts.
 var previousContext = emptyContextObject;
 
+//  获取没有遮罩的上下文
 function getUnmaskedContext(workInProgress, Component, didPushOwnContextIfProvider) {
   if (didPushOwnContextIfProvider && isContextProvider(Component)) {
+    //  是否fiber是上下文provider本身，当我们获取上线文的时候，我们已经将子上下文
+    //  推送到我们堆栈中。一个上下文provider不会感知到自己子上下文。因此我们阅读
+    //  先前的父上下文而不是上下文的provider
     // If the fiber is a context provider itself, when we read its context
     // we may have already pushed its own child context on the stack. A context
     // provider should not "see" its own child context. Therefore we read the
@@ -12056,12 +12081,16 @@ function getUnmaskedContext(workInProgress, Component, didPushOwnContextIfProvid
   return contextStackCursor.current;
 }
 
+//  上下文缓存
 function cacheContext(workInProgress, unmaskedContext, maskedContext) {
   var instance = workInProgress.stateNode;
+  //  react内部记忆化的未蒙层的子上下文
   instance.__reactInternalMemoizedUnmaskedChildContext = unmaskedContext;
+    //  react内部记忆化的有蒙层的子上下文
   instance.__reactInternalMemoizedMaskedChildContext = maskedContext;
 }
 
+//  获取蒙层的剩下文
 function getMaskedContext(workInProgress, unmaskedContext) {
   var type = workInProgress.type;
   var contextTypes = type.contextTypes;
